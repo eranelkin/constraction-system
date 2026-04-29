@@ -5,7 +5,7 @@ import { createAuthMiddleware } from './auth.middleware.js';
 
 export function createAuthRouter(container: AppContainer): Router {
   const router = Router();
-  const { authProvider } = container;
+  const { authProvider, userRepository } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
   router.post('/register', async (req, res, next) => {
@@ -50,6 +50,15 @@ export function createAuthRouter(container: AppContainer): Router {
 
   router.get('/me', authenticate, (req, res) => {
     res.json({ user: req.user });
+  });
+
+  router.get('/users', authenticate, async (req, res, next) => {
+    try {
+      const users = await userRepository.listAll(req.user!.id);
+      res.json({ users });
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

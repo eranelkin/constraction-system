@@ -1,4 +1,4 @@
-import type { User, CreateUserDTO, UpdateUserDTO } from '@constractor/types';
+import type { User, CreateUserDTO, UpdateUserDTO, ContactUser } from '@constractor/types';
 import type { IDatabase } from '../DatabaseProvider.js';
 import type { IUserRepository } from './IUserRepository.js';
 
@@ -33,6 +33,14 @@ export class UserRepository implements IUserRepository {
       [id],
     );
     return row ? rowToUser(row) : null;
+  }
+
+  async listAll(excludeId: string): Promise<ContactUser[]> {
+    const { rows } = await this.db.query<{ id: string; display_name: string; role: string }>(
+      `SELECT id, display_name, role FROM users WHERE id != $1 ORDER BY display_name ASC`,
+      [excludeId],
+    );
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name, role: r.role as ContactUser['role'] }));
   }
 
   async findByEmail(email: string): Promise<User | null> {

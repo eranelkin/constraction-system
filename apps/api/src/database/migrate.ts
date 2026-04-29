@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '@constractor/config';
@@ -10,12 +10,16 @@ async function migrate() {
   console.log('Running database migrations…');
   const db = new PostgreSQLAdapter(config.DATABASE_URL);
 
-  const migrationPath = resolve(__dirname, 'migrations', '001_initial.sql');
-  const sql = readFileSync(migrationPath, 'utf-8');
+  const migrationsDir = resolve(__dirname, 'migrations');
+  const files = (await readdir(migrationsDir)).filter(f => f.endsWith('.sql')).sort();
 
-  await db.query(sql);
+  for (const file of files) {
+    console.log(`  → ${file}`);
+    const sql = await readFile(resolve(migrationsDir, file), 'utf-8');
+    await db.query(sql);
+  }
+
   await db.close();
-
   console.log('✅ Migrations complete.');
 }
 

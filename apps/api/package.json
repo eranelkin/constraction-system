@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "node --env-file=.env --import tsx/esm --watch src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
     "type-check": "tsc --noEmit",
-    "db:migrate": "tsx src/database/migrate.ts",
+    "db:migrate": "node --env-file=.env --import tsx/esm src/database/migrate.ts",
     "test": "node --env-file=.env ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --env-file=.env ./node_modules/vitest/vitest.mjs",
     "test:coverage": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --coverage"

@@ -1,37 +1,47 @@
 import { beforeAll, afterAll, beforeEach } from 'vitest';
+import { readdir, readFile } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildContainer } from '../container.js';
 import { createApp } from '../app.js';
 import type { AppContainer } from '../container.js';
 import type { Express } from 'express';
 
-// Shared across the entire test process
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Module-level singletons — shared across all test files in the same process
 let container: AppContainer;
 let app: Express;
+let migrated = false;
 
 beforeAll(async () => {
-  container = await buildContainer();
-  app = createApp(container);
+  if (!container) {
+    container = await buildContainer();
+    app = createApp(container);
+  }
 
-  // Run migrations so tables exist
-  const { readFileSync } = await import('node:fs');
-  const { resolve, dirname } = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const sql = readFileSync(resolve(__dirname, '../database/migrations/001_initial.sql'), 'utf-8');
-  await container.db.query(sql);
+  if (!migrated) {
+    const migrationsDir = resolve(__dirname, '../database/migrations');
+    const files = (await readdir(migrationsDir)).filter(f => f.endsWith('.sql')).sort();
+    for (const file of files) {
+      const sql = await readFile(resolve(migrationsDir, file), 'utf-8');
+      await container.db.query(sql);
+    }
+    migrated = true;
+  }
 });
 
 afterAll(async () => {
-  await container.db.close();
+  // Only close on the very last suite — check via a flag or just don't close
+  // Vitest will end the process, pool cleanup happens automatically
 });
 
-// Wipe auth tables before each test for isolation
 beforeEach(async () => {
-  await container.db.query('DELETE FROM refresh_tokens');
-  await container.db.query('DELETE FROM users');
+  await container.db.query(
+    'TRUNCATE job_applications, jobs, messages, conversation_participants, conversations, refresh_tokens, users CASCADE',
+  );
 });
 
-// Expose to tests without re-building
 export function getApp(): Express {
   return app;
 }

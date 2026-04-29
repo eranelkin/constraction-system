@@ -126,7 +126,7 @@ pnpm --filter @constractor/config build
 pnpm --filter @constractor/api run db:migrate
 ```
 
-Creates the `users` and `refresh_tokens` tables in PostgreSQL.
+Creates all tables: `users`, `refresh_tokens`, conversations/messages, and jobs/applications.
 
 ---
 
@@ -171,13 +171,18 @@ pnpm --filter @constractor/web dev
 
 Open **http://localhost:3000** in your browser.
 
-**Available screens in Phase 1:**
+**Available screens:**
 
-| Path | Screen |
-|---|---|
-| `/` | Home — links to Login and Register |
-| `/login` | Login form |
-| `/register` | Register form (name, email, password, role) |
+| Path | Screen | Who |
+|---|---|---|
+| `/` | Home — links to Login and Register | Public |
+| `/login` | Login form | Public |
+| `/register` | Register form (name, email, password, role) | Public |
+| `/dashboard` | Messaging — conversation list + real-time chat | All users |
+| `/jobs` | Job board — browse open jobs | All users |
+| `/jobs/new` | Post a new job | Clients only |
+| `/jobs/[id]` | Job detail — apply (contractor) or view/hire applicants (client) | All users |
+| `/my-jobs` | My posted jobs (client) or my applications with status (contractor) | All users |
 
 The web app talks to the API at `http://localhost:4000` by default (controlled by `NEXT_PUBLIC_API_URL` in `apps/api/.env`, which is already set correctly). No additional config is needed for local development.
 
@@ -258,15 +263,17 @@ pnpm --filter @constractor/mobile start
 
 The app will load on your device within a few seconds.
 
-### Mobile screens in Phase 1
+### Mobile screens
 
 | Screen | How to reach |
 |---|---|
 | Home | App launch — shows Login and Register buttons |
 | Login | Tap **Login** — enter email and password |
 | Register | Tap **Register** — enter name, email, password, role |
-
-After a successful login or register the app attempts to navigate to `/dashboard` (not built yet in Phase 1 — this is the entry point for Phase 2).
+| Conversations | `/(messages)` — list of conversations with pull-to-refresh |
+| Chat | `/(messages)/[id]` — real-time message thread (3 s polling) |
+| Job Board | `/(jobs)` — browse open jobs with pull-to-refresh |
+| Job Detail | `/(jobs)/[id]` — apply (contractor) or hire applicants (client) |
 
 ### Troubleshooting mobile
 
@@ -302,14 +309,14 @@ Base URL: `http://localhost:4000`
 
 ### Auth
 
-| Method | Path | Body | Description |
-|---|---|---|---|
-| `POST` | `/auth/register` | `{ email, password, displayName, role }` | Create account · roles: `admin`, `contractor`, `client` |
-| `POST` | `/auth/login` | `{ email, password }` | Sign in |
-| `GET` | `/auth/me` | — · Bearer token required | Get current user |
-| `POST` | `/auth/refresh` | `{ refreshToken }` | Issue new token pair (single-use rotation) |
-| `POST` | `/auth/logout` | `{ refreshToken }` | Revoke refresh token |
-| `GET` | `/health` | — | Health check |
+| Method | Path | Auth | Body | Description |
+|---|---|---|---|---|
+| `POST` | `/auth/register` | — | `{ email, password, displayName, role }` | Create account · roles: `contractor`, `client` |
+| `POST` | `/auth/login` | — | `{ email, password }` | Sign in |
+| `GET` | `/auth/me` | Bearer | — | Get current user |
+| `POST` | `/auth/refresh` | — | `{ refreshToken }` | Issue new token pair (single-use rotation) |
+| `POST` | `/auth/logout` | — | `{ refreshToken }` | Revoke refresh token |
+| `GET` | `/health` | — | — | Health check |
 
 **Token usage:**
 ```
@@ -317,6 +324,38 @@ Authorization: Bearer <accessToken>
 ```
 
 Access tokens expire in 15 minutes. Refresh tokens expire in 30 days and are invalidated after each use — the response always contains a new refresh token.
+
+### Messaging
+
+All routes require `Authorization: Bearer <accessToken>`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/messaging/conversations` | List conversations for the current user |
+| `POST` | `/messaging/conversations` | `{ participantId }` — start or resume a conversation |
+| `GET` | `/messaging/conversations/:id/messages` | List messages; optional `?after=<messageId>` cursor |
+| `POST` | `/messaging/conversations/:id/messages` | `{ body }` — send a message |
+| `POST` | `/messaging/conversations/:id/read` | Mark conversation as read |
+
+### Jobs
+
+All routes require `Authorization: Bearer <accessToken>`.
+
+| Method | Path | Role | Body | Description |
+|---|---|---|---|---|
+| `POST` | `/jobs` | client | `{ title, description, budget, location }` | Post a new job |
+| `GET` | `/jobs` | any | — | List all open jobs |
+| `GET` | `/jobs/:id` | any | — | Job detail; contractors see only their own application |
+| `PATCH` | `/jobs/:id` | client (owner) | `{ status: 'completed' \| 'cancelled' }` | Update job status |
+| `POST` | `/jobs/:id/apply` | contractor | `{ coverNote }` | Apply to a job |
+| `POST` | `/jobs/:id/hire/:applicationId` | client (owner) | — | Hire an applicant; auto-creates a conversation |
+| `GET` | `/my/jobs` | client | — | List jobs posted by the current client |
+| `GET` | `/my/applications` | contractor | — | List the current contractor's applications |
+
+**Status transitions:**
+- `open` → `assigned` (via hire)
+- `assigned` → `completed` (via PATCH)
+- `open` → `cancelled` (via PATCH)
 
 ---
 
@@ -365,9 +404,13 @@ constractor-system/
 │   │       │   ├── IQueueProvider.ts
 │   │       │   └── IRealtimeProvider.ts
 │   │       ├── domain/
-│   │       │   └── User.ts     # User entity, CreateUserDTO, PublicUser
+│   │       │   ├── User.ts     # User entity + roles
+│   │       │   ├── Message.ts  # Conversation + Message entities
+│   │       │   └── Job.ts      # Job + JobApplication entities, status enums
 │   │       └── api/
-│   │           └── auth.dto.ts # Request/response shapes shared by all clients
+│   │           ├── auth.dto.ts      # Auth request/response shapes
+│   │           ├── messaging.dto.ts # Messaging request/response shapes
+│   │           └── jobs.dto.ts      # Jobs request/response shapes
 │   │
 │   └── config/                 # @constractor/config
 │       └── src/
@@ -384,56 +427,80 @@ constractor-system/
 │   │       │   ├── adapters/
 │   │       │   │   └── PostgreSQLAdapter.ts    # pg pool — implements IDatabase
 │   │       │   ├── migrations/
-│   │       │   │   └── 001_initial.sql         # users + refresh_tokens tables
-│   │       │   ├── migrate.ts                  # Migration runner (pnpm db:migrate)
+│   │       │   │   ├── 001_initial.sql         # users + refresh_tokens
+│   │       │   │   ├── 002_messages.sql        # conversations + messages + trigger
+│   │       │   │   └── 003_jobs.sql            # jobs + job_applications + trigger
+│   │       │   ├── migrate.ts                  # Runs all *.sql files in order
 │   │       │   └── repositories/
-│   │       │       ├── IUserRepository.ts
-│   │       │       └── UserRepository.ts       # Raw SQL, depends only on IDatabase
+│   │       │       ├── IUserRepository.ts / UserRepository.ts
+│   │       │       ├── IConversationRepository.ts / ConversationRepository.ts
+│   │       │       ├── IMessageRepository.ts / MessageRepository.ts
+│   │       │       ├── IJobRepository.ts / JobRepository.ts
+│   │       │       └── IJobApplicationRepository.ts / JobApplicationRepository.ts
 │   │       ├── providers/                      # Concrete provider implementations
-│   │       │   ├── auth/
-│   │       │   │   └── JWTAuthProvider.ts      # bcrypt + JWT + refresh token rotation
-│   │       │   ├── ai/
-│   │       │   │   └── MockAIProvider.ts       # Returns predictable fake responses
-│   │       │   ├── storage/
-│   │       │   │   └── LocalStorageProvider.ts # Writes to UPLOAD_DIR on disk
-│   │       │   ├── queue/
-│   │       │   │   └── InMemoryQueueProvider.ts # setTimeout-based in-process queue
-│   │       │   └── realtime/
-│   │       │       └── InMemoryRealtimeProvider.ts # In-process pub/sub
+│   │       │   ├── auth/JWTAuthProvider.ts     # bcrypt + JWT + refresh token rotation
+│   │       │   ├── ai/MockAIProvider.ts
+│   │       │   ├── storage/LocalStorageProvider.ts
+│   │       │   ├── queue/InMemoryQueueProvider.ts
+│   │       │   └── realtime/InMemoryRealtimeProvider.ts
 │   │       ├── modules/                        # Domain feature slices
-│   │       │   └── auth/
-│   │       │       ├── auth.schema.ts          # Zod request validation
-│   │       │       ├── auth.middleware.ts       # createAuthMiddleware + requireRole
-│   │       │       └── auth.router.ts          # createAuthRouter(container)
-│   │       └── shared/
-│   │           ├── errors.ts                   # AppError, NotFoundError, etc.
-│   │           └── middleware/
-│   │               └── errorHandler.ts         # Zod + AppError → JSON response
+│   │       │   ├── auth/
+│   │       │   │   ├── auth.schema.ts
+│   │       │   │   ├── auth.middleware.ts       # createAuthMiddleware + requireRole
+│   │       │   │   └── auth.router.ts
+│   │       │   ├── messaging/
+│   │       │   │   ├── messaging.schema.ts
+│   │       │   │   └── messaging.router.ts
+│   │       │   └── jobs/
+│   │       │       ├── jobs.schema.ts
+│   │       │       ├── jobs.router.ts          # /jobs — CRUD + apply + hire
+│   │       │       └── my.router.ts            # /my/jobs + /my/applications
+│   │       ├── shared/
+│   │       │   ├── errors.ts                   # AppError, NotFoundError, etc.
+│   │       │   └── middleware/errorHandler.ts
+│   │       └── test/
+│   │           ├── setup.ts                    # DB migrations + per-test TRUNCATE
+│   │           ├── auth.test.ts
+│   │           ├── messaging.test.ts
+│   │           └── jobs.test.ts
 │   │
-│   ├── web/                    # @constractor/web — Next.js 15
+│   ├── web/                    # @constractor/web — Next.js 15 (App Router)
 │   │   └── src/
 │   │       ├── app/
 │   │       │   ├── layout.tsx
-│   │       │   ├── page.tsx                    # Home page
-│   │       │   └── (auth)/
-│   │       │       ├── login/page.tsx
-│   │       │       └── register/page.tsx
+│   │       │   ├── page.tsx                    # Home
+│   │       │   ├── (auth)/
+│   │       │   │   ├── login/page.tsx
+│   │       │   │   └── register/page.tsx
+│   │       │   └── (dashboard)/
+│   │       │       ├── dashboard/page.tsx      # Messaging UI
+│   │       │       ├── jobs/page.tsx           # Job board
+│   │       │       ├── jobs/new/page.tsx       # Post a job (client)
+│   │       │       ├── jobs/[id]/page.tsx      # Job detail — apply / hire
+│   │       │       └── my-jobs/page.tsx        # My posted jobs / applications
 │   │       └── lib/
-│   │           ├── api-client.ts               # Typed fetch wrapper (attaches Bearer token)
-│   │           └── auth/
-│   │               └── session.ts              # sessionStorage (access) + localStorage (refresh)
+│   │           ├── api-client.ts               # Typed fetch wrapper
+│   │           └── auth/session.ts             # sessionStorage + localStorage
 │   │
-│   └── mobile/                 # @constractor/mobile — Expo 52
+│   └── mobile/                 # @constractor/mobile — Expo 52 (Expo Router)
 │       └── src/
 │           ├── app/
-│           │   ├── _layout.tsx                 # Expo Router root layout
+│           │   ├── _layout.tsx                 # Root stack navigator
 │           │   ├── index.tsx                   # Home screen
-│           │   └── (auth)/
-│           │       └── login.tsx
+│           │   ├── (auth)/
+│           │   │   ├── login.tsx
+│           │   │   └── register.tsx
+│           │   ├── (messages)/
+│           │   │   ├── _layout.tsx
+│           │   │   ├── index.tsx               # Conversation list
+│           │   │   └── [id].tsx                # Chat thread (3 s polling)
+│           │   └── (jobs)/
+│           │       ├── _layout.tsx
+│           │       ├── index.tsx               # Job board
+│           │       └── [id].tsx                # Job detail — apply / hire
 │           └── lib/
-│               ├── api-client.ts               # Same typed fetch wrapper as web
-│               └── auth/
-│                   └── token-storage.ts        # expo-secure-store wrapper
+│               ├── api-client.ts
+│               └── auth/token-storage.ts       # expo-secure-store wrapper
 ```
 
 ---
@@ -473,6 +540,8 @@ main.ts
 
 Raw SQL through `IDatabase` — no ORM. `PostgreSQLAdapter` wraps a `pg.Pool`. Repositories accept `IDatabase` in their constructor; they are completely unaware of the underlying adapter. All queries use positional parameters (`$1`, `$2`, …).
 
+Transactions use `db.transaction(async (tx) => { ... })` — pass `tx` as the `IDatabase` to all repositories inside the callback. Nested `transaction()` calls participate in the outer transaction (safe to call from repository methods). This pattern is used by the hire endpoint to atomically accept an application, update job status, and create a conversation in one commit.
+
 ### Auth
 
 1. `POST /auth/register` or `POST /auth/login` → returns `{ accessToken, refreshToken }`
@@ -504,10 +573,12 @@ pnpm format
 
 ### Adding a new API module
 
-1. Create `apps/api/src/modules/<name>/` with `<name>.schema.ts`, `<name>.router.ts`
-2. Add a migration file in `apps/api/src/database/migrations/` and run `pnpm --filter @constractor/api run db:migrate`
-3. Add the repository to `AppContainer` in `container.ts`
-4. Register the router in `app.ts`
+1. Add domain types to `packages/types/src/domain/` and DTOs to `packages/types/src/api/`, then export from `packages/types/src/index.ts`
+2. Create a migration file in `apps/api/src/database/migrations/` (use `IF NOT EXISTS`) and run `pnpm --filter @constractor/api run db:migrate`
+3. Create `I<Name>Repository.ts` + `<Name>Repository.ts` in `apps/api/src/database/repositories/`
+4. Create `apps/api/src/modules/<name>/` with `<name>.schema.ts` and `<name>.router.ts`
+5. Add the repository to `AppContainer` in `container.ts` and wire it in `buildContainer()`
+6. Register the router in `app.ts`
 
 ### Switching to real providers
 

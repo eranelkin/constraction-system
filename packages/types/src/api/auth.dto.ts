@@ -1,5 +1,15 @@
 import type { AuthTokens, AuthUser, UserRole } from '../providers/IAuthProvider.js';
 
+export interface ContactUser {
+  id: string;
+  displayName: string;
+  role: UserRole;
+}
+
+export interface ListUsersResponse {
+  users: ContactUser[];
+}
+
 export interface RegisterRequestDTO {
   email: string;
   password: string;

@@ -9,11 +9,11 @@ export interface JobOptions {
   priority?: number;
 }
 
-export type JobStatus = 'queued' | 'processing' | 'done' | 'failed';
+export type QueueJobStatus = 'queued' | 'processing' | 'done' | 'failed';
 
 export interface JobResult<T = unknown> {
   jobId: string;
-  status: JobStatus;
+  status: QueueJobStatus;
   result?: T;
   error?: string;
 }

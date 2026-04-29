@@ -5,8 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./src/test/setup.ts'],
-    // Run all test files in a single worker — shares the DB connection pool
+    // Single worker + sequential files prevents deadlocks on shared DB tables
     singleFork: true,
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
