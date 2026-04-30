@@ -10,7 +10,7 @@
 
 Multi-team construction site management platform.
 - **Mobile-first** — on-site workers (contractors) use phones, often multilingual
-- **Desktop/back-office** — managers (clients) post jobs, track teams, manage tasks
+- **Desktop/back-office** — managers and admins use the web app to post jobs, manage teams, assign tasks
 - **Two primary modules:** Messages and Tasks (see Phase 3 below)
 - **UX principle:** Comic/construction style — bold, colored, rounded, "wow" effect. Large touch targets. Friendly for non-tech workers.
 
@@ -75,9 +75,11 @@ pnpm --filter @constractor/api run db:migrate      # run all 3 migrations
 ### Daily start
 ```bash
 docker compose up -d
+pnpm dev                                           # runs API + web + mobile together (turbo)
+# OR individually:
 pnpm --filter @constractor/api dev       # API :4000  (loads .env automatically)
 pnpm --filter @constractor/web dev       # Web :3000
-pnpm --filter @constractor/mobile start  # Expo — scan QR with Expo Go on phone
+pnpm --filter @constractor/mobile dev   # Expo — scan QR with Expo Go on phone
 ```
 
 ### Mobile physical device
@@ -127,12 +129,14 @@ All params positional: `$1, $2, ...` (PostgreSQL syntax).
 `POST /auth/login` → returns `{ user: AuthUser, tokens: { accessToken, refreshToken } }`
 `POST /auth/refresh` → old refresh token revoked, new pair issued (single-use rotation)
 If a revoked refresh token is presented → ALL user sessions immediately revoked (security)
-Protect route: `router.get('/path', authenticate, requireRole('client'), handler)`
+Protect route: `router.get('/path', authenticate, requireRole('manager'), handler)`
 
-### Roles
-- `client` → **Manager** — back office, posts jobs, manages teams
-- `contractor` → **Worker** — on-site, applies to jobs, receives tasks
-- `admin` → reserved, not yet used in UI
+### Roles (IMPORTANT — use these exact strings everywhere)
+- `manager` — Back-office user. Posts jobs, manages teams, manages users. Lands on `/manage/users` after login.
+- `member` — On-site worker/contractor. Applies to jobs, receives tasks. Mobile-primary.
+- `admin` — Full access. Can manage admin accounts and is the only one who can delete the last admin.
+
+> ⚠️ Old session had `client`/`contractor` — those are WRONG. The DB and API use `manager`/`member`/`admin`.
 
 ---
 
@@ -140,7 +144,7 @@ Protect route: `router.get('/path', authenticate, requireRole('client'), handler
 
 ### Migration 001 — users & auth
 ```sql
-users (id UUID PK, email TEXT UNIQUE, password_hash, display_name, role, email_verified, created_at)
+users (id UUID PK, email TEXT UNIQUE, password_hash, display_name, role CHECK('admin','manager','member'), email_verified, created_at)
 refresh_tokens (id, user_id FK, token_hash UNIQUE, expires_at, revoked_at, created_at, user_agent, ip_address)
 ```
 
@@ -179,17 +183,22 @@ POST /auth/login                               → { user, tokens }  (body: emai
 POST /auth/refresh                             → { tokens }        (body: refreshToken)
 POST /auth/logout                              → 204               (body: refreshToken)
 GET  /auth/me                                  → { user }
-GET  /auth/users                               → { users: ContactUser[] }  (all users except self, sorted by name)
+GET  /auth/users                               → { users: ContactUser[] }  (all users except self, sorted by name; id+displayName+role only)
+
+GET  /users                                    → { users[] }       (admin/manager only; full user objects)
+POST /users                                    → { user }          (admin/manager; body: email, password, displayName, role)
+PATCH /users/:id                               → { user }          (admin/manager; body: any subset of above)
+DELETE /users/:id                              → 204               (admin/manager)
 
 GET  /jobs                                     → { jobs: JobSummary[] }    (open jobs only)
-POST /jobs                                     → { job: JobDetail }        (client only)
-GET  /jobs/:id                                 → { job: JobDetail }        (contractor sees only own application)
-PATCH /jobs/:id                                → { job: JobDetail }        (client only; status: 'completed'|'cancelled')
-POST /jobs/:id/apply                           → { application }           (contractor only; 409 if duplicate)
-POST /jobs/:id/hire/:applicantId               → { job: JobDetail }        (client only; creates conversation automatically)
+POST /jobs                                     → { job: JobDetail }        (manager only)
+GET  /jobs/:id                                 → { job: JobDetail }        (member sees only own application)
+PATCH /jobs/:id                                → { job: JobDetail }        (manager only; status: 'completed'|'cancelled')
+POST /jobs/:id/apply                           → { application }           (member only; 409 if duplicate)
+POST /jobs/:id/hire/:applicantId               → { job: JobDetail }        (manager only; creates conversation automatically)
 
-GET  /my/jobs                                  → { jobs: JobSummary[] }    (client: own jobs)
-GET  /my/applications                          → { applications[] }        (contractor: own applications + job info)
+GET  /my/jobs                                  → { jobs: JobSummary[] }    (manager: own jobs)
+GET  /my/applications                          → { applications[] }        (member: own applications + job info)
 
 GET  /messaging/conversations                  → { conversations: ConversationSummary[] }
 POST /messaging/conversations                  → { conversation }          (body: participantId; finds or creates)
@@ -198,10 +207,15 @@ POST /messaging/conversations/:id/messages     → { message }               (bo
 POST /messaging/conversations/:id/read         → 204
 ```
 
-**Business rules:**
-- Hiring a contractor (`POST /jobs/:id/hire/:applicantId`): accepts that application, rejects all others, marks job as 'assigned', creates a conversation between client and contractor — all in one DB transaction.
-- Contractors only see their own application on `GET /jobs/:id`.
-- `GET /auth/users` returns `{ id, displayName, role }` only — no email or password hash.
+### /users permission rules (enforced in router)
+- Managers cannot create, edit, or delete `admin` accounts — only admins can touch admins.
+- Cannot change your own role (`PATCH /users/:id` where id === actor.id).
+- Cannot delete your own account.
+- Cannot delete the last remaining admin account.
+
+**Business rules (jobs):**
+- Hiring a contractor (`POST /jobs/:id/hire/:applicantId`): accepts that application, rejects all others, marks job as 'assigned', creates a conversation between manager and member — all in one DB transaction.
+- Members only see their own application on `GET /jobs/:id`.
 
 ---
 
@@ -228,17 +242,38 @@ After editing types, always rebuild: `pnpm --filter @constractor/types build`
 
 ## 9. Web App (Next.js) — Current State
 
+The web app is the **back-office** for managers and admins. Members (workers) use mobile only — the web login rejects the `member` role.
+
 ### Routes
 ```
-/                         → redirects to /login
-/(auth)/login             → Sign In page  ✅ comic style
-/(auth)/register          → Sign Up page  ✅ comic style, visual role picker
-/(dashboard)/dashboard    → Messaging hub (Chats + People tabs)  ✅
-/(dashboard)/jobs         → Job board  (plain style — not yet redesigned)
-/(dashboard)/jobs/new     → Post a job (client only, plain style)
-/(dashboard)/jobs/[id]    → Job detail + apply/hire (plain style)
-/(dashboard)/my-jobs      → My jobs / My applications (plain style)
+/                              → redirects to /login
+
+/(auth)/login                  → Sign In ✅ comic style; managers/admins only; redirects to /manage/users on success
+/(auth)/register               → Sign Up ✅ comic style, visual role picker (Manager/Worker)
+
+/(dashboard)/dashboard         → Messaging hub (Chats + People tabs) ✅
+/(dashboard)/jobs              → Job board (plain style)
+/(dashboard)/jobs/new          → Post a job (manager only, plain style)
+/(dashboard)/jobs/[id]         → Job detail + apply/hire (plain style)
+/(dashboard)/my-jobs           → My posted jobs (manager) / my applications (member) — plain style
+
+/manage/users                  → User management dashboard ✅ DONE — see below
+/manage/tasks                  → Tasks management (placeholder — coming soon)
 ```
+
+### /manage/users — User Management (completed)
+Full CRUD for users, accessible to `manager` and `admin` roles only.
+
+**Features:**
+- Table view: display name, email, role badge, join date, edit/delete actions
+- **Add user** — inline form: display name, email, password, role picker (Admin/Manager/Worker)
+- **Edit user** — modal/inline form: edit display name, email, password (optional), role
+- **Delete user** — confirmation modal before deletion
+- Permission-aware UI: managers cannot see the option to assign `admin` role
+
+**API calls used:** `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id`
+
+**File:** `apps/web/src/app/manage/users/page.tsx`
 
 ### Design system — `apps/web/src/app/globals.css`
 CSS classes (use these in all new/updated pages):
@@ -311,23 +346,17 @@ Same structure as web: `ApiRequestError` class, `apiRequest<T>()` function.
 ## 11. Planned Phases
 
 ### Phase 3 — In Progress / Next Up
-**A. Mobile redesign** (comic style)
-- Apply orange/yellow/navy palette to all mobile screens
-- Large touch targets, round corners, bold typography
-- Rewrite messages `index.tsx` with contacts list (People tab) — call `GET /auth/users`
-- Create missing `(auth)/register.tsx` screen
-- Fix navigation: after login go to `/(jobs)` or a proper home tab, not `/dashboard`
 
-**B. Tasks module** (new feature — both apps)
-Core concept: a Job can have multiple Tasks. A Task is assigned to a specific contractor/worker. Workers see their tasks on mobile, managers see all tasks for a job on web.
+**A. Tasks module** (new feature — both apps) — NEXT PRIORITY
+Core concept: a Job can have multiple Tasks. A Task is assigned to a specific member/worker. Workers see their tasks on mobile, managers see all tasks for a job on web.
 
 DB schema to add (migration 004):
 ```sql
 tasks (
   id UUID PK,
   job_id UUID FK jobs(id),
-  assigned_to UUID FK users(id),   -- contractor
-  created_by UUID FK users(id),    -- client/manager
+  assigned_to UUID FK users(id),   -- member/worker
+  created_by UUID FK users(id),    -- manager
   title TEXT,
   description TEXT,
   status TEXT CHECK IN ('todo', 'in_progress', 'done', 'blocked'),
@@ -340,19 +369,26 @@ tasks (
 API to add:
 ```
 GET  /jobs/:id/tasks              → { tasks[] }      (participants only)
-POST /jobs/:id/tasks              → { task }         (client only)
-PATCH /tasks/:id                  → { task }         (assigned worker can update status; client can update all fields)
-DELETE /tasks/:id                 → 204              (client only)
+POST /jobs/:id/tasks              → { task }         (manager only)
+PATCH /tasks/:id                  → { task }         (assigned member can update status; manager can update all fields)
+DELETE /tasks/:id                 → 204              (manager only)
 ```
 
+Web UX: `/manage/tasks` page — manager sees all tasks across all their jobs, with status columns or filters.
+Also: add task list to job detail page (`/jobs/[id]`).
 Mobile UX: worker opens app → sees "My Tasks" as the main screen with status cards.
-Web UX: manager opens job detail → sees task list with drag-to-reorder or status columns.
+
+**B. Mobile redesign** (comic style)
+- Apply orange/yellow/navy palette to all mobile screens
+- Large touch targets, round corners, bold typography
+- Rewrite messages `index.tsx` with contacts list (People tab) — call `GET /auth/users`
+- Create missing `(auth)/register.tsx` screen
+- Fix navigation: after login go to `/(jobs)` or a proper home tab, not `/dashboard`
 
 ### Phase 4 — Future
 - Real-time messaging (replace 3-second polling with WebSocket via `SocketIOProvider`)
 - Push notifications for new messages and task assignments (Expo Notifications)
 - Multi-language UI support (i18n — workers may speak Arabic, Russian, etc.)
-- Admin panel (role: 'admin') — user management, all jobs overview
 - File attachments on tasks/messages (photos from site) — swap to S3StorageProvider
 
 ---
@@ -367,7 +403,7 @@ Web UX: manager opens job detail → sees task list with drag-to-reorder or stat
 
 4. **Mobile: messages "paste user ID"** — `(messages)/index.tsx` still requires manual UUID input. Fix: call `GET /auth/users` and show a contacts list.
 
-5. **Web: dashboard only pages not redesigned** — `/jobs`, `/jobs/new`, `/jobs/[id]`, `/my-jobs` still use plain inline styles, not the comic design system. Should be updated in Phase 3.
+5. **Web: jobs/dashboard pages not fully redesigned** — `/jobs`, `/jobs/new`, `/jobs/[id]`, `/my-jobs`, `/dashboard` still use plain inline styles, not the comic CSS classes. Should be updated alongside tasks module work.
 
 ---
 
@@ -379,10 +415,12 @@ Web UX: manager opens job detail → sees task list with drag-to-reorder or stat
 | Route registration | `apps/api/src/app.ts` |
 | DI container | `apps/api/src/container.ts` |
 | DB migrations | `apps/api/src/database/migrations/00x_*.sql` |
+| Users module (API) | `apps/api/src/modules/users/` |
 | Shared types | `packages/types/src/` |
 | Web globals.css | `apps/web/src/app/globals.css` |
 | Web session utils | `apps/web/src/lib/auth/session.ts` |
 | Web API client | `apps/web/src/lib/api-client.ts` |
+| Web user management | `apps/web/src/app/manage/users/page.tsx` |
 | Mobile token storage | `apps/mobile/src/lib/auth/token-storage.ts` |
 | Mobile API client | `apps/mobile/src/lib/api-client.ts` |
 | Mobile env | `apps/mobile/.env` |

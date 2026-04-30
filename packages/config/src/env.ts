@@ -13,7 +13,7 @@ const booleanFromString = z
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    PORT: z.coerce.number().int().positive().default(4000),
+    PORT: z.coerce.number().int().positive().default(4501),
     DATABASE_URL: z.string().url(),
     ACCESS_TOKEN_SECRET: z.string().min(16),
     REFRESH_TOKEN_SECRET: z.string().min(16),
@@ -32,7 +32,7 @@ const envSchema = z
     REDIS_URL: z.string().default('redis://localhost:6379'),
     CORS_ORIGINS: z
       .string()
-      .default('http://localhost:3000,http://localhost:19006')
+      .default('http://localhost:4500,http://localhost:4502')
       .transform((v) => v.split(',')),
   })
   .refine(
