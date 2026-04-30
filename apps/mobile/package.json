@@ -11,16 +11,18 @@
   },
   "dependencies": {
     "@constractor/types": "workspace:*",
-    "expo": "~52.0.0",
-    "expo-router": "~4.0.0",
-    "expo-secure-store": "~14.0.0",
-    "expo-status-bar": "~2.0.0",
-    "react": "18.3.1",
-    "react-native": "0.76.5"
+    "@expo/metro-runtime": "^6.1.2",
+    "expo": "~54.0.34",
+    "expo-linking": "^8.0.0",
+    "expo-router": "~6.0.23",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@types/react": "~18.3.0",
+    "@types/react": "~19.2.14",
     "typescript": "*"
   }
 }

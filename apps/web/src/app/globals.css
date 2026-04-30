@@ -1,0 +1,309 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --orange: #FF6B2B;
+  --yellow: #FFD93D;
+  --navy: #1C1C2E;
+  --cream: #FFFBF2;
+  --white: #FFFFFF;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --border: 2.5px solid var(--navy);
+  --shadow-sm: 3px 3px 0 var(--navy);
+  --shadow-md: 5px 5px 0 var(--navy);
+  --shadow-lg: 8px 8px 0 var(--navy);
+}
+
+html, body {
+  height: 100%;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Comic-style input */
+.comic-input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--cream);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  color: var(--navy);
+}
+
+.comic-input:focus {
+  border-color: var(--orange);
+  box-shadow: 4px 4px 0 var(--orange);
+}
+
+.comic-input::placeholder {
+  color: #aaa;
+}
+
+/* Comic-style select */
+.comic-select {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--cream);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  color: var(--navy);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231C1C2E' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+}
+
+.comic-select:focus {
+  border-color: var(--orange);
+  box-shadow: 4px 4px 0 var(--orange);
+}
+
+/* Comic button primary */
+.comic-btn-primary {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 800;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  background: var(--orange);
+  color: var(--white);
+  border: var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.comic-btn-primary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--navy);
+}
+
+.comic-btn-primary:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--navy);
+}
+
+.comic-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Comic button secondary */
+.comic-btn-secondary {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  background: var(--white);
+  color: var(--navy);
+  border: var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.comic-btn-secondary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--navy);
+}
+
+.comic-btn-secondary:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--navy);
+}
+
+/* Auth page background */
+.auth-bg {
+  min-height: 100dvh;
+  background: linear-gradient(145deg, #FF6B2B 0%, #FF8E53 40%, #FFD93D 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Halftone dots overlay */
+.auth-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(0,0,0,0.07) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+  pointer-events: none;
+}
+
+/* Auth card */
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--white);
+  border: 3px solid var(--navy);
+  border-radius: 28px;
+  box-shadow: 10px 10px 0 var(--navy);
+  overflow: hidden;
+}
+
+/* Auth card header strip */
+.auth-card-header {
+  background: var(--navy);
+  padding: 1.75rem 2rem 1.5rem;
+  text-align: center;
+}
+
+.auth-card-body {
+  padding: 1.75rem 2rem 2rem;
+}
+
+/* Tab row */
+.auth-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: #f1f1f1;
+  border: var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+  color: #666;
+  background: transparent;
+}
+
+.auth-tab.active {
+  background: var(--orange);
+  color: var(--white);
+  box-shadow: 2px 2px 0 var(--navy);
+}
+
+/* Role picker cards */
+.role-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.role-card {
+  padding: 1rem 0.75rem;
+  border: var(--border);
+  border-radius: var(--radius-md);
+  background: var(--cream);
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.role-card:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-md);
+}
+
+.role-card.selected {
+  background: var(--navy);
+  color: var(--white);
+  box-shadow: var(--shadow-md);
+}
+
+.role-card.selected .role-label {
+  color: var(--yellow);
+}
+
+.role-card.selected .role-desc {
+  color: rgba(255,255,255,0.7);
+}
+
+.role-emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.role-label {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--navy);
+  letter-spacing: 0.3px;
+}
+
+.role-desc {
+  font-size: 0.72rem;
+  color: #666;
+  line-height: 1.3;
+}
+
+/* Field label */
+.field-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin-bottom: 0.4rem;
+}
+
+/* Error banner */
+.error-banner {
+  background: #FFF0F0;
+  border: 2px solid #e53e3e;
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  font-size: 0.875rem;
+  color: #c53030;
+  font-weight: 600;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.4em;
+}
