@@ -1,5 +1,5 @@
 import { Slot } from 'expo-router';
 
-export default function JobsLayout() {
+export default function AuthLayout() {
   return <Slot />;
 }

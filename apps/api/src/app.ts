@@ -6,6 +6,7 @@ import { createAuthRouter } from './modules/auth/auth.router.js';
 import { createMessagingRouter } from './modules/messaging/messaging.router.js';
 import { createJobsRouter } from './modules/jobs/jobs.router.js';
 import { createMyRouter } from './modules/jobs/my.router.js';
+import { createUsersRouter } from './modules/users/users.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
 export function createApp(container: AppContainer): Express {
@@ -26,6 +27,7 @@ export function createApp(container: AppContainer): Express {
   app.use('/messaging', createMessagingRouter(container));
   app.use('/jobs', createJobsRouter(container));
   app.use('/my', createMyRouter(container));
+  app.use('/users', createUsersRouter(container));
 
   app.use(errorHandler);
 

@@ -11,7 +11,7 @@ export function createMyRouter(container: AppContainer): Router {
 
   router.get('/jobs', async (req, res, next) => {
     try {
-      if (req.user!.role !== 'client') {
+      if (req.user!.role !== 'manager') {
         res.json({ jobs: [] });
         return;
       }
@@ -24,7 +24,7 @@ export function createMyRouter(container: AppContainer): Router {
 
   router.get('/applications', async (req, res, next) => {
     try {
-      if (req.user!.role !== 'contractor') {
+      if (req.user!.role !== 'member') {
         res.json({ applications: [] });
         return;
       }

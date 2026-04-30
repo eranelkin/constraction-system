@@ -6,7 +6,7 @@ import { apiRequest } from '@/lib/api-client';
 import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/session';
 import type {
   ListConversationsResponse,
-  ListUsersResponse,
+  ListContactsResponse,
   ListMessagesResponse,
   SendMessageResponse,
   StartConversationResponse,
@@ -54,7 +54,7 @@ export default function DashboardPage() {
 
   const loadContacts = useCallback(async () => {
     try {
-      const data = await apiRequest<ListUsersResponse>('/auth/users', { token: token() });
+      const data = await apiRequest<ListContactsResponse>('/auth/users', { token: token() });
       setContacts(data.users);
     } catch {
       // ignore

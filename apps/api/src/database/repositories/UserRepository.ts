@@ -1,4 +1,4 @@
-import type { User, CreateUserDTO, UpdateUserDTO, ContactUser } from '@constractor/types';
+import type { User, CreateUserDTO, UpdateUserDTO, PublicUser, ContactUser } from '@constractor/types';
 import type { IDatabase } from '../DatabaseProvider.js';
 import type { IUserRepository } from './IUserRepository.js';
 
@@ -33,6 +33,25 @@ export class UserRepository implements IUserRepository {
       [id],
     );
     return row ? rowToUser(row) : null;
+  }
+
+  async listAllFull(): Promise<PublicUser[]> {
+    const { rows } = await this.db.query<UserRow>(
+      `SELECT * FROM users ORDER BY display_name ASC`,
+      [],
+    );
+    return rows.map((r) => {
+      const { passwordHash: _, ...rest } = rowToUser(r);
+      return rest as PublicUser;
+    });
+  }
+
+  async countByRole(role: string): Promise<number> {
+    const row = await this.db.queryOne<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM users WHERE role = $1',
+      [role],
+    );
+    return parseInt(row?.count ?? '0', 10);
   }
 
   async listAll(excludeId: string): Promise<ContactUser[]> {
@@ -70,6 +89,18 @@ export class UserRepository implements IUserRepository {
     if (data.displayName !== undefined) {
       fields.push(`display_name = $${idx++}`);
       values.push(data.displayName);
+    }
+    if (data.email !== undefined) {
+      fields.push(`email = $${idx++}`);
+      values.push(data.email);
+    }
+    if (data.role !== undefined) {
+      fields.push(`role = $${idx++}`);
+      values.push(data.role);
+    }
+    if (data.passwordHash !== undefined) {
+      fields.push(`password_hash = $${idx++}`);
+      values.push(data.passwordHash);
     }
     if (data.emailVerified !== undefined) {
       fields.push(`email_verified = $${idx++}`);

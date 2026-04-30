@@ -11,12 +11,13 @@ This guide walks you through everything you need to install, run, and manually t
 3. [Start the Database](#3-start-the-database)
 4. [Configure and Set Up the API](#4-configure-and-set-up-the-api)
 5. [Start All Services](#5-start-all-services)
-6. [How to Test the App — Web Browser](#6-how-to-test-the-app--web-browser)
-7. [How to Test the App — Mobile](#7-how-to-test-the-app--mobile)
-8. [Full End-to-End Test Scenario](#8-full-end-to-end-test-scenario)
-9. [Running the Automated Tests](#9-running-the-automated-tests)
-10. [Stopping Everything](#10-stopping-everything)
-11. [Troubleshooting](#11-troubleshooting)
+6. [Dev Test Accounts](#6-dev-test-accounts)
+7. [How to Use the Web Management Portal](#7-how-to-use-the-web-management-portal)
+8. [How to Test the App — Mobile](#8-how-to-test-the-app--mobile)
+9. [Full End-to-End Test Scenario](#9-full-end-to-end-test-scenario)
+10. [Running the Automated Tests](#10-running-the-automated-tests)
+11. [Stopping Everything](#11-stopping-everything)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -139,239 +140,240 @@ Run the database migrations (this creates all the tables):
 pnpm --filter @constractor/api run db:migrate
 ```
 
-You should see output mentioning the migration files (`001_initial.sql`, `002_messages.sql`, `003_jobs.sql`). If there are no errors, the database is ready.
+You should see output like this — no errors means the database is ready:
+```
+Running database migrations…
+  → 001_initial.sql
+  → 002_messages.sql
+  → 003_jobs.sql
+  → 004_rename_roles_and_seed.sql
+✅ Migrations complete.
+```
+
+### 4d. Seed the dev test accounts
+
+Create the built-in admin and manager accounts for development and testing:
+
+```bash
+pnpm --filter @constractor/api run db:seed
+```
+
+Output confirms both accounts were created:
+```
+✓ admin: admin@constractor.dev
+✓ manager: manager@constractor.dev
+
+Dev users seeded. Credentials:
+  admin    admin@constractor.dev  /  Admin1234!
+  manager  manager@constractor.dev  /  Manager1234!
+```
+
+> The seed is safe to run multiple times — it uses `ON CONFLICT DO NOTHING` so it won't create duplicates.
 
 ---
 
 ## 5. Start All Services
 
-Start the API, web app, and mobile dev server all at once:
+You can start everything at once:
 
 ```bash
 pnpm dev
 ```
 
-After about 10–20 seconds, three services are running:
+Or start each service in a separate terminal for cleaner logs:
 
-| Service | Address | What it does |
+```bash
+# Terminal 1
+pnpm --filter @constractor/api dev        # API on :4000
+
+# Terminal 2
+pnpm --filter @constractor/web dev        # Web portal on :3000
+
+# Terminal 3
+pnpm --filter @constractor/mobile start   # Mobile Expo server
+```
+
+After about 10–20 seconds:
+
+| Service | Address | Who uses it |
 |---|---|---|
-| API | http://localhost:4000 | The backend — handles all data |
-| Web App | http://localhost:3000 | The browser interface |
-| Mobile | http://localhost:8081 | The Expo dev server for the mobile app |
+| API | http://localhost:4000 | Everything talks to this |
+| Web Portal | http://localhost:3000 | Admins and Managers only |
+| Mobile | Scan QR in terminal | Members (workers) on their phones |
 
 **Verify the API is alive:**
-Open a new terminal tab and run:
 ```bash
 curl http://localhost:4000/health
 ```
-You should see: `{"status":"ok","version":"0.0.1","timestamp":"..."}`
-
-> The `pnpm dev` command runs in the foreground and shows logs from all three services. Keep this terminal window open while you're using the app. To stop everything, press `Ctrl + C`.
+Expected: `{"status":"ok","version":"0.0.1","timestamp":"..."}`
 
 ---
 
-## 6. How to Test the App — Web Browser
+## 6. Dev Test Accounts
 
-Open **http://localhost:3000** in your browser.
+These accounts are created by `db:seed` and are ready to use immediately.
 
-### Step 1 — Register a Client account
+### Web Portal Accounts (http://localhost:3000)
 
-A **client** is someone who posts jobs (e.g., a homeowner who needs work done).
+| Role    | Email                    | Password     | Access |
+|---------|--------------------------|--------------|--------|
+| Admin   | admin@constractor.dev    | Admin1234!   | Full access — can manage all users including other admins |
+| Manager | manager@constractor.dev  | Manager1234! | Can manage members and other managers, cannot touch admin accounts |
 
-1. Click **Register**
-2. Fill in:
-   - **Display Name:** `Alice Client`
-   - **Email:** `alice@example.com`
-   - **Password:** `password123`
-   - **Role:** select **Client**
-3. Click **Register**
-4. You are now logged in as Alice. You'll see the dashboard.
+> **Members cannot log in to the web portal.** If a member account tries to log in at `/login`, they see the message: *"This portal is for managers only. Please use the mobile app."*
 
-### Step 2 — Register a Contractor account (second browser or incognito window)
+### Mobile App Accounts
 
-A **contractor** is someone who applies for jobs and does the work.
+Members are created via the web portal's Users tab (or via `POST /auth/register`). Once created, they log in using Expo Go on their phone with whatever email/password you set.
 
-Open a **new incognito/private window** (so you can be logged in as two users at once):
-- **Chrome/Edge:** `Ctrl + Shift + N` (Windows) / `Cmd + Shift + N` (Mac)
-- **Firefox:** `Ctrl + Shift + P` / `Cmd + Shift + P`
-- **Safari:** `Cmd + Shift + N`
+For quick testing, you can also register directly from the mobile app's register screen.
 
-Navigate to **http://localhost:3000** in the new window and click **Register**:
-- **Display Name:** `Bob Contractor`
-- **Email:** `bob@example.com`
-- **Password:** `password123`
-- **Role:** select **Contractor**
+### Role Summary
 
-Click **Register**. Bob is now logged in.
-
-### Step 3 — Alice posts a job
-
-In Alice's browser window:
-1. Click **Job Board** in the header
-2. Click **Post a Job** (blue button, top right — only visible to clients)
-3. Fill in the form:
-   - **Title:** `Fix kitchen tap`
-   - **Description:** `My kitchen tap has been dripping for a week. Need a plumber to fix it.`
-   - **Budget:** `250`
-   - **Location:** `Tel Aviv`
-4. Click **Post Job**
-
-You'll be taken to the job detail page. The status badge shows **open**.
-
-### Step 4 — Bob applies for the job
-
-In Bob's browser window:
-1. Click **Job Board** in the header
-2. You should see Alice's job "Fix kitchen tap" listed
-3. Click on it
-4. In the **Apply** section at the bottom, type a cover note:
-   `I'm a licensed plumber with 8 years of experience. I can come tomorrow.`
-5. Click **Apply**
-
-The form is replaced by a **Pending** status badge — Bob's application is submitted.
-
-### Step 5 — Alice hires Bob
-
-Switch back to Alice's browser window:
-1. Navigate to the job (it should still be open, or click **Job Board → Fix kitchen tap**)
-2. Scroll down to **Applications** — you'll see Bob's application
-3. Click **Hire** next to Bob's name
-
-The job status changes to **assigned** and Bob's application shows **accepted**. At the same time, a conversation between Alice and Bob is automatically created.
-
-### Step 6 — Alice and Bob message each other
-
-In Alice's browser:
-1. Click **Messages** in the header
-2. You'll see a conversation with Bob already listed
-3. Click on it, then type a message: `Hi Bob! Can you come on Thursday at 10am?`
-4. Press **Send**
-
-In Bob's browser:
-1. Click **Messages** in the header  
-2. The conversation with Alice appears — the message arrives automatically within 3 seconds
-3. Bob replies: `Sure, Thursday at 10am works great!`
-
-### Step 7 — Alice marks the job complete
-
-After the work is done, Alice can close out the job:
-1. Click **My Jobs** in the header (Alice)
-2. Click on "Fix kitchen tap"
-3. The job detail shows status **assigned** — there is currently no "Complete" button in the UI (this transition can be done via the API directly — see below)
-
-To complete a job via the API, open a new terminal and run:
-```bash
-# Get Alice's token first by logging in via the API, or use the browser's
-# developer tools → Application → Session Storage → access_token
-curl -X PATCH http://localhost:4000/jobs/<job-id> \
-  -H "Authorization: Bearer <alice-access-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"completed"}'
-```
-
-### Step 8 — Check "My Jobs" / "My Applications"
-
-- **Alice** clicks **My Jobs** → sees "Fix kitchen tap" with its current status badge
-- **Bob** clicks **My Jobs** → sees his application for "Fix kitchen tap" with status **accepted** and job status shown alongside it
+| Role    | Web Portal | Mobile App | Can do |
+|---------|-----------|------------|--------|
+| Admin   | ✅ Yes    | ✅ Yes     | Manage all users, all system access |
+| Manager | ✅ Yes    | ✅ Yes     | Manage members and managers, post jobs |
+| Member  | ❌ No     | ✅ Yes     | Apply to jobs, receive tasks, message managers |
 
 ---
 
-## 7. How to Test the App — Mobile
+## 7. How to Use the Web Management Portal
 
-You have three options. **Option A (iOS Simulator)** is the easiest on a Mac.
+Open **http://localhost:3000** in your browser. You'll be redirected to the login page.
 
-### Option A — iOS Simulator (Mac only, requires Xcode)
+### Logging in
 
-1. Install **Xcode** from the Mac App Store (it's free, but large — ~15 GB)
-2. After installation, open Xcode once to accept the license agreement
-3. In your terminal (while `pnpm dev` is running), press **`i`** in the Expo output to open the iOS Simulator
+Use one of the dev accounts from Section 6. After login you land on the **Management Dashboard** at `/manage/users`.
 
-The Constractor app will install and open in the simulator automatically.
+### Users Tab — Managing Team Members
 
-### Option B — Android Emulator
+The Users tab shows a table of all users with columns: **Name**, **Email**, **Role**, **Joined**, **Actions**.
 
-1. Install **Android Studio** from https://developer.android.com/studio
-2. Open Android Studio → **Device Manager** → create a virtual device (Pixel 7, API 34 recommended) → click the play button to start it
-3. In your terminal (while `pnpm dev` is running), press **`a`** in the Expo output
+**Adding a new user:**
+1. Click the **+ Add User** button (top right)
+2. A form panel opens above the table
+3. Fill in: Display Name, Email, Password (min 8 chars), Role
+4. Click **✓ Create User**
 
-### Option C — Your Physical Phone (easiest, no extra installs)
+The new user appears in the table immediately and can now log in to the mobile app with their credentials.
+
+**Editing a user:**
+1. Click **✏️ Edit** next to any user row
+2. Update name, email, or role — leave password blank to keep it unchanged
+3. Click **✓ Save Changes**
+
+**Deleting a user:**
+1. Click **🗑️ Delete** next to a user
+2. A confirmation modal appears: *"Delete [Name]? This cannot be undone."*
+3. Click **Yes, Delete** to confirm
+
+**Security rules enforced in the UI and API:**
+- You cannot delete your own account
+- Managers cannot create, edit, or delete Admin accounts
+- Managers cannot assign the Admin role to anyone
+- The last Admin account cannot be deleted (prevents lockout)
+
+### Tasks Tab
+
+Coming soon — currently shows a placeholder page.
+
+### Logging out
+
+Click the **Logout** button in the top-right corner of the navigation bar.
+
+---
+
+## 8. How to Test the App — Mobile
+
+### Prerequisites
 
 1. Install **Expo Go** on your phone:
-   - iPhone: search "Expo Go" in the App Store
-   - Android: search "Expo Go" in the Play Store
+   - iPhone: App Store → search "Expo Go"
+   - Android: Play Store → search "Expo Go"
 
-2. Your phone and computer must be on **the same Wi-Fi network**
+2. Your phone and Mac must be on the **same Wi-Fi network**
 
-3. Find your computer's local IP address:
+3. Find your Mac's local IP address:
    ```bash
-   # Mac
    ipconfig getifaddr en0
-   
-   # Windows (PowerShell)
-   (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias Wi-Fi).IPAddress
    ```
    It will look like `192.168.1.42`.
 
-4. Update the mobile environment file:
+4. Create and configure the mobile environment file:
    ```bash
    cp apps/mobile/.env.example apps/mobile/.env
    ```
-   Open `apps/mobile/.env` in any text editor and change the last line to use your IP:
+   Open `apps/mobile/.env` and set your IP:
    ```
    EXPO_PUBLIC_API_URL=http://192.168.1.42:4000
    ```
+   > Update this IP any time you change networks.
 
-5. Stop and restart the dev server:
+5. Start the mobile dev server:
    ```bash
-   # Press Ctrl+C to stop pnpm dev, then:
-   pnpm dev
+   pnpm --filter @constractor/mobile start --clear
    ```
 
-6. Scan the QR code that appears in the terminal:
-   - **iPhone:** open the built-in Camera app and point it at the QR code
-   - **Android:** open Expo Go and tap **Scan QR code**
+6. Scan the QR code:
+   - **iPhone:** open the built-in Camera app and point it at the QR code → tap the Expo Go banner
+   - **Android:** open Expo Go → tap **Scan QR code**
 
-### What you can do in the mobile app
+### Mobile Navigation
+
+> **Note:** The mobile app currently uses `<Slot />` navigation instead of `<Stack />` due to a known incompatibility between Expo Go SDK 54 + Android's New Architecture and `react-native-screens`. This means no back button or header bar — navigation works but without native transition animations. This will be fixed in a future Development Build.
 
 | Screen | How to get there |
 |---|---|
-| Register / Login | App launch → tap Register or Login |
-| Job Board | Navigate to `/(jobs)` — swipe down to refresh |
+| Home | App launch — tap Login or Register |
+| Login | Tap Login from Home |
+| Register | Tap Register from Home |
+| Job Board | After login → navigates to `/(jobs)` |
 | Job Detail | Tap any job card |
-| Apply to a job | Tap a job → type cover note → tap Apply (contractor) |
-| Hire a contractor | Tap a job → tap Hire next to an applicant (client) |
-| Conversations | Navigate to `/(messages)` |
+| Messages | Navigate to `/(messages)` |
 | Chat | Tap a conversation |
+
+### Creating a member account for mobile testing
+
+Option 1 — **Via web portal** (recommended):
+1. Log in to http://localhost:3000 as admin or manager
+2. Go to Users tab → + Add User
+3. Set role to **Member**, set a name/email/password
+4. That user can now log in on Expo Go
+
+Option 2 — **Via mobile register screen:**
+1. Tap **Register** on the mobile home screen
+2. Fill in name, email, password, select **Worker** role
+3. You're logged in immediately
 
 ---
 
-## 8. Full End-to-End Test Scenario
+## 9. Full End-to-End Test Scenario
 
-This is the recommended test that exercises every major feature:
+This scenario exercises the complete flow from user creation to messaging.
 
 | Step | Who | Action | Expected result |
 |---|---|---|---|
-| 1 | — | `docker compose up -d` + `pnpm dev` | All services running |
-| 2 | Client (Alice) | Register at `/register` with role **Client** | Redirected to dashboard |
-| 3 | Contractor (Bob) | Register in incognito with role **Contractor** | Redirected to dashboard |
-| 4 | Alice | Job Board → Post a Job | New job created, status **open** |
-| 5 | Bob | Job Board → click the job → Apply | Application submitted, status **pending** |
-| 6 | Alice | Job detail → Applications → click **Hire** | Job status → **assigned**; Bob's app → **accepted** |
-| 7 | Both | Messages → open conversation | Conversation was auto-created by the hire action |
-| 8 | Alice | Send a message | Appears immediately in Alice's view |
-| 9 | Bob | Check Messages | Alice's message appears within ~3 seconds |
-| 10 | Alice | My Jobs | Shows the job with status **assigned** |
-| 11 | Bob | My Jobs | Shows application status **accepted** |
-| 12 | Alice | `PATCH /jobs/:id` with `{"status":"completed"}` | Job status → **completed** |
+| 1 | — | `docker compose up -d` + start API + web | All services running |
+| 2 | Admin | Log in at http://localhost:3000 with `admin@constractor.dev` / `Admin1234!` | Lands on `/manage/users` |
+| 3 | Admin | Users tab → + Add User → create a Manager account | Manager appears in table |
+| 4 | Admin | Users tab → + Add User → create a Member account (e.g. `worker@test.com` / `Worker1234!`) | Member appears in table |
+| 5 | Member | Open Expo Go → Login with `worker@test.com` / `Worker1234!` | Lands on Job Board |
+| 6 | Manager | Log in at http://localhost:3000 | Lands on `/manage/users` |
+| 7 | Manager | Navigate to Job Board → Post a Job | New job created, status **open** |
+| 8 | Member | Mobile → Job Board (pull to refresh) → tap job → Apply | Application submitted |
+| 9 | Manager | Web → Job Board → job detail → Applications → Hire | Job → **assigned**, conversation auto-created |
+| 10 | Both | Web Messages / Mobile Messages → open conversation | Auto-created conversation visible |
+| 11 | Manager | Send a message | Appears in the conversation |
+| 12 | Member | Mobile → Messages → conversation | Message appears within ~3 seconds |
 
 ---
 
-## 9. Running the Automated Tests
+## 10. Running the Automated Tests
 
 The project has an integration test suite that runs against a real database. Make sure Docker is running and the database is up before running tests.
 
 ```bash
-# Run all API tests
 pnpm --filter @constractor/api test
 ```
 
@@ -382,32 +384,18 @@ A successful run looks like:
    Duration  ~35s
 ```
 
-To run a single test file:
-```bash
-cd apps/api
-pnpm test src/test/jobs.test.ts
-```
-
-To run only tests matching a name pattern:
-```bash
-cd apps/api
-pnpm test --reporter=verbose -t "hire"
-```
-
-**Type-check all packages** (catches TypeScript errors without running):
+**Type-check all packages** (catches TypeScript errors without running the app):
 ```bash
 pnpm type-check
 ```
 
 ---
 
-## 10. Stopping Everything
+## 11. Stopping Everything
 
-To stop the development servers (API + web + mobile):
-
+To stop the development servers:
 ```bash
-# In the terminal running pnpm dev, press:
-Ctrl + C
+# Press Ctrl+C in any terminal running pnpm dev / pnpm --filter ... dev
 ```
 
 To stop the database containers:
@@ -415,59 +403,81 @@ To stop the database containers:
 docker compose down
 ```
 
-> Your database data is preserved in a Docker volume. The next time you run `docker compose up -d`, all your registered users, jobs, and messages will still be there.
+> Your database data is preserved in a Docker volume. The next time you run `docker compose up -d`, all users, jobs, and messages will still be there.
 
 To wipe the database completely and start fresh:
 ```bash
 docker compose down -v
 docker compose up -d
 pnpm --filter @constractor/api run db:migrate
+pnpm --filter @constractor/api run db:seed
 ```
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### "Cannot connect to the Docker daemon"
-Docker Desktop is not running. Open the Docker Desktop application from your Applications folder (Mac) or Start Menu (Windows) and wait until it says "Running".
+Docker Desktop is not running. Open Docker Desktop from your Applications folder (Mac) or Start Menu (Windows) and wait until it says "Running".
 
 ### "Connection refused" on port 4000
-The API is not running. Make sure `pnpm dev` is running in a terminal, or start just the API with `pnpm --filter @constractor/api dev`.
+The API is not running. Start it with:
+```bash
+pnpm --filter @constractor/api dev
+```
 
 ### "relation does not exist" error in the API
-You haven't run migrations yet. Run:
+You haven't run migrations yet:
 ```bash
 pnpm --filter @constractor/api run db:migrate
 ```
 
+### Dev accounts don't exist / login fails
+Run the seed script:
+```bash
+pnpm --filter @constractor/api run db:seed
+```
+
+### "This portal is for managers only" on web login
+You are trying to log in with a **member** account. The web portal only accepts admin and manager accounts. Use `admin@constractor.dev` or `manager@constractor.dev`, or create a manager account via the Admin account first.
+
 ### Web app shows a blank page or React error
-Open the browser developer console (`F12` → Console tab) to see the error. If it mentions a hydration error, try a hard refresh (`Ctrl + Shift + R` / `Cmd + Shift + R`).
+Open the browser developer console (`F12` → Console tab). If it mentions a hydration error, try a hard refresh (`Ctrl + Shift + R` / `Cmd + Shift + R`).
 
 ### "Network request failed" on mobile (physical device)
-Your phone is using `localhost` which doesn't point to your computer. Follow [Option C](#option-c--your-physical-phone-easiest-no-extra-installs) and set `EXPO_PUBLIC_API_URL` to your computer's local IP address.
+Your phone is using `localhost` which doesn't point to your computer. Follow Section 8 and set `EXPO_PUBLIC_API_URL` to your Mac's local IP address (`ipconfig getifaddr en0`).
+
+### Mobile app crashes with "java.lang.String cannot be cast to java.lang.Boolean"
+This is a known incompatibility between Expo Go SDK 54's forced New Architecture on Android and `react-native-screens`. The app is currently using `<Slot />` navigation to work around this. If you still see the error:
+1. Make sure Expo Go is updated to the latest version on your phone
+2. Restart the Metro server with `--clear`: `pnpm --filter @constractor/mobile start --clear`
+3. Scan the QR code again
+
+### Metro shows "Unable to resolve" import errors
+The mobile app uses Metro bundler which does **not** need `.js` file extensions in imports (unlike the API). If you add new files to the mobile app, import them without extensions:
+```typescript
+import { foo } from '@/lib/foo';       // ✅ correct
+import { foo } from '@/lib/foo.js';    // ❌ wrong in mobile
+```
 
 ### Port already in use (EADDRINUSE)
-Another process is using port 4000, 3000, or 8081. Find and stop it:
+Another process is using port 4000, 3000, or 8081:
 ```bash
 # Find what is using port 4000
 lsof -i :4000
-
 # Kill it (replace <PID> with the number shown)
 kill -9 <PID>
 ```
 
-### Tests fail with "deadlock detected"
-Vitest is configured to prevent this (`fileParallelism: false`), but if you see it, make sure you haven't changed `vitest.config.ts`. Also ensure no other test process is running against the same database.
-
 ### pnpm install fails
-Make sure Node.js version is 20 or higher (`node --version`). If you have an older version installed, use [nvm](https://github.com/nvm-sh/nvm):
+Make sure Node.js version is 20 or higher (`node --version`). If you have an older version:
 ```bash
 nvm install 22
 nvm use 22
+pnpm install
 ```
-Then retry `pnpm install`.
 
 ### Something else is wrong
-1. Check the terminal running `pnpm dev` for error messages
+1. Check the terminal running the API for error messages
 2. Check the browser console (`F12`) for client-side errors
-3. Try stopping everything (`Ctrl + C`, `docker compose down`), then starting fresh from Step 3
+3. Try stopping everything, wiping the database (Section 11), and starting fresh from Step 3

@@ -36,7 +36,7 @@ export default function MyJobsPage() {
     async function load() {
       try {
         const token = getAccessToken() ?? '';
-        if (user!.role === 'client') {
+        if (user!.role === 'manager') {
           const data = await apiRequest<MyJobsResponse>('/my/jobs', { token });
           setJobs(data.jobs);
         } else {
@@ -55,7 +55,7 @@ export default function MyJobsPage() {
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: '1.5rem', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>{user?.role === 'client' ? 'My Jobs' : 'My Applications'}</h1>
+        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>{user?.role === 'manager' ? 'My Jobs' : 'My Applications'}</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button onClick={() => router.push('/dashboard')} style={{ padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
             Messages
@@ -74,7 +74,7 @@ export default function MyJobsPage() {
 
       {loading ? (
         <p style={{ color: '#94a3b8' }}>Loading…</p>
-      ) : user?.role === 'client' ? (
+      ) : user?.role === 'manager' ? (
         jobs.length === 0 ? (
           <p style={{ color: '#94a3b8' }}>You haven't posted any jobs yet.</p>
         ) : (

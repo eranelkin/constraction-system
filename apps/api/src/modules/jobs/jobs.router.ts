@@ -14,7 +14,7 @@ export function createJobsRouter(container: AppContainer): Router {
 
   router.use(authenticate);
 
-  router.post('/', requireRole('client'), async (req, res, next) => {
+  router.post('/', requireRole('manager'), async (req, res, next) => {
     try {
       const data = createJobSchema.parse(req.body);
       const job = await jobRepository.create(req.user!.id, data);
@@ -40,7 +40,7 @@ export function createJobsRouter(container: AppContainer): Router {
       if (!job) throw new NotFoundError('Job');
 
       const user = req.user!;
-      if (user.role === 'contractor') {
+      if (user.role === 'member') {
         job.applications = job.applications.filter((a) => a.contractorId === user.id);
       }
 
@@ -50,7 +50,7 @@ export function createJobsRouter(container: AppContainer): Router {
     }
   });
 
-  router.patch('/:id', requireRole('client'), async (req, res, next) => {
+  router.patch('/:id', requireRole('manager'), async (req, res, next) => {
     try {
       const { id } = req.params as { id: string };
       const { status } = updateJobStatusSchema.parse(req.body);
@@ -74,7 +74,7 @@ export function createJobsRouter(container: AppContainer): Router {
     }
   });
 
-  router.post('/:id/apply', requireRole('contractor'), async (req, res, next) => {
+  router.post('/:id/apply', requireRole('member'), async (req, res, next) => {
     try {
       const { id } = req.params as { id: string };
       const { coverNote } = applyToJobSchema.parse(req.body);
@@ -104,7 +104,7 @@ export function createJobsRouter(container: AppContainer): Router {
     }
   });
 
-  router.post('/:id/hire/:applicantId', requireRole('client'), async (req, res, next) => {
+  router.post('/:id/hire/:applicantId', requireRole('manager'), async (req, res, next) => {
     try {
       const { id, applicantId } = req.params as { id: string; applicantId: string };
 

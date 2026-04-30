@@ -6,7 +6,7 @@ export interface ContactUser {
   role: UserRole;
 }
 
-export interface ListUsersResponse {
+export interface ListContactsResponse {
   users: ContactUser[];
 }
 

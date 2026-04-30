@@ -12,6 +12,6 @@ export interface User {
 
 export type CreateUserDTO = Omit<User, 'id' | 'createdAt' | 'emailVerified'>;
 
-export type UpdateUserDTO = Partial<Pick<User, 'displayName' | 'emailVerified'>>;
+export type UpdateUserDTO = Partial<Pick<User, 'displayName' | 'emailVerified' | 'role' | 'email' | 'passwordHash'>>;
 
 export type PublicUser = Omit<User, 'passwordHash'>;

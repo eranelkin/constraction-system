@@ -26,8 +26,12 @@ export default function LoginPage() {
           password: form.get('password'),
         },
       });
+      if (result.user.role === 'member') {
+        setError('This portal is for managers only. Please use the mobile app.');
+        return;
+      }
       saveSession(result.user, result.tokens);
-      router.push('/dashboard');
+      router.push('/manage/users');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

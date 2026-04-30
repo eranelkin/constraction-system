@@ -89,7 +89,7 @@ export default function JobDetailPage() {
     return <div style={{ padding: '2rem', fontFamily: 'sans-serif', color: '#dc2626' }}>Job not found.</div>;
   }
 
-  const myApp = user?.role === 'contractor' ? job.applications.at(0) : undefined;
+  const myApp = user?.role === 'member' ? job.applications.at(0) : undefined;
 
   return (
     <div style={{ maxWidth: '680px', margin: '0 auto', padding: '1.5rem', fontFamily: 'sans-serif' }}>
@@ -126,7 +126,7 @@ export default function JobDetailPage() {
       </div>
 
       {/* Contractor: apply or show status */}
-      {user?.role === 'contractor' && (
+      {user?.role === 'member' && (
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', marginBottom: '1.5rem' }}>
           {myApp ? (
             <div>
@@ -170,7 +170,7 @@ export default function JobDetailPage() {
       )}
 
       {/* Client: list applications */}
-      {user?.role === 'client' && (
+      {user?.role === 'manager' && (
         <div>
           <h2 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>
             Applications ({job.applications.length})

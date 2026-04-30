@@ -17,7 +17,7 @@ export default function NewJobPage() {
 
   useEffect(() => {
     const user = getStoredUser();
-    if (!user || user.role !== 'client') {
+    if (!user || user.role !== 'manager') {
       router.push('/jobs');
     }
   }, [router]);

@@ -43,7 +43,7 @@ export default function JobsPage() {
           <button onClick={() => router.push('/my-jobs')} style={{ padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
             My Jobs
           </button>
-          {user?.role === 'client' && (
+          {user?.role === 'manager' && (
             <button
               onClick={() => router.push('/jobs/new')}
               style={{ padding: '0.375rem 0.75rem', cursor: 'pointer', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px' }}
