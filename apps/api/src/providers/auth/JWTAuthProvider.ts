@@ -28,6 +28,7 @@ interface JWTPayload {
   email: string;
   role: string;
   displayName: string;
+  language: string;
 }
 
 function hashToken(token: string): string {
@@ -83,6 +84,7 @@ export class JWTAuthProvider implements IAuthProvider {
           email: payload.email,
           role: payload.role as AuthUser['role'],
           displayName: payload.displayName,
+          language: payload.language ?? 'en',
           emailVerified: true,
         },
       };
@@ -141,6 +143,7 @@ export class JWTAuthProvider implements IAuthProvider {
       email: user.email,
       role: user.role,
       displayName: user.displayName,
+      language: user.language,
     };
 
     const accessToken = jwt.sign(payload, this.config.ACCESS_TOKEN_SECRET, {
@@ -172,6 +175,7 @@ export class JWTAuthProvider implements IAuthProvider {
       email: user.email,
       role: user.role,
       displayName: user.displayName,
+      language: user.language,
       emailVerified: user.emailVerified,
     };
   }

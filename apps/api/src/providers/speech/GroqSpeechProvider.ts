@@ -5,11 +5,12 @@ export class GroqSpeechProvider implements ISpeechProvider {
 
   constructor(private readonly apiKey: string) {}
 
-  async transcribe(audioBuffer: Buffer, mimeType: string): Promise<string> {
+  async transcribe(audioBuffer: Buffer, mimeType: string, language?: string): Promise<string> {
     const form = new FormData();
     form.append('file', new Blob([audioBuffer], { type: mimeType }), 'voice.m4a');
     form.append('model', 'whisper-large-v3-turbo');
     form.append('response_format', 'json');
+    if (language && language !== 'en') form.append('language', language);
 
     const response = await fetch(this.endpoint, {
       method: 'POST',

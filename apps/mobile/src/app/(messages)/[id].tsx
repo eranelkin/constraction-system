@@ -65,6 +65,9 @@ export default function ThreadScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [userLanguage, setUserLanguage] = useState<string>('en');
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState<Record<string, boolean>>({});
 
   // Voice state
   const [voicePhase, setVoicePhase] = useState<VoicePhase | null>(null);
@@ -75,6 +78,7 @@ export default function ThreadScreen() {
 
   const lastIdRef = useRef<string | undefined>(undefined);
   const flatListRef = useRef<FlatList<Message>>(null);
+  const translatingSet = useRef<Set<string>>(new Set());
 
   const fetchToken = useCallback(async () => {
     return (await getAccessToken()) ?? undefined;
@@ -84,6 +88,7 @@ export default function ThreadScreen() {
     void (async () => {
       const user = await getStoredUser();
       setUserId(user?.id ?? null);
+      setUserLanguage((user as { language?: string } | null)?.language ?? 'en');
     })();
   }, []);
 
@@ -257,24 +262,77 @@ export default function ThreadScreen() {
     return `${m}:${s}`;
   }
 
+  // ── Auto-translate received messages ────────────────────────────────────
+
+  useEffect(() => {
+    if (!userId || !userLanguage) return;
+
+    const toTranslate = messages.filter(
+      (m) => m.senderId !== userId && !translatingSet.current.has(m.id),
+    );
+    if (!toTranslate.length) return;
+
+    toTranslate.forEach((m) => translatingSet.current.add(m.id));
+
+    setTranslating((prev) => {
+      const next = { ...prev };
+      toTranslate.forEach((m) => { next[m.id] = true; });
+      return next;
+    });
+
+    void (async () => {
+      const token = await fetchToken();
+      await Promise.all(
+        toTranslate.map(async (m) => {
+          try {
+            const data = await apiRequest<{ translatedText: string }>('/translate', {
+              method: 'POST',
+              body: { text: m.body, targetLanguage: userLanguage },
+              token,
+            });
+            setTranslations((prev) => ({ ...prev, [m.id]: data.translatedText }));
+          } catch {
+            // silently fail — show original text
+            translatingSet.current.delete(m.id);
+          } finally {
+            setTranslating((prev) => ({ ...prev, [m.id]: false }));
+          }
+        }),
+      );
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, userId, userLanguage]);
+
   // ── Render helpers ───────────────────────────────────────────────────────
 
   function renderItem({ item }: { item: Message }) {
     const isMe = item.senderId === userId;
+    const translated = translations[item.id];
+    const isTranslating = translating[item.id] ?? false;
+
+    const avatarNode = participantId ? (
+      <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={32} />
+    ) : (
+      <View style={[styles.bubbleAvatar, { backgroundColor: color }]}>
+        <Text style={styles.bubbleAvatarEmoji}>{emoji}</Text>
+      </View>
+    );
+
     return (
-      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowMe : styles.bubbleRowThem]}>
-        {!isMe && (
-          participantId ? (
-            <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={32} />
-          ) : (
-            <View style={[styles.bubbleAvatar, { backgroundColor: color }]}>
-              <Text style={styles.bubbleAvatarEmoji}>{emoji}</Text>
+      <View style={styles.messageGroup}>
+        <View style={[styles.bubbleRow, isMe ? styles.bubbleRowMe : styles.bubbleRowThem]}>
+          {!isMe && avatarNode}
+          <View style={styles.bubbleWrapper}>
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+              {!isMe && <Text style={styles.senderName}>{item.senderName}</Text>}
+              {!isMe && isTranslating && !translated
+                ? <ActivityIndicator size={12} color="#888" style={{ alignSelf: 'flex-start' }} />
+                : <Text style={isMe ? styles.bubbleMeText : styles.bubbleThemText}>
+                    {(!isMe && translated) ? translated : item.body}
+                  </Text>
+              }
             </View>
-          )
-        )}
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-          {!isMe && <Text style={styles.senderName}>{item.senderName}</Text>}
-          <Text style={isMe ? styles.bubbleMeText : styles.bubbleThemText}>{item.body}</Text>
+          </View>
         </View>
       </View>
     );
@@ -467,7 +525,7 @@ const styles = StyleSheet.create({
 
   // Messages
   messageList: { padding: 14, gap: 10, paddingBottom: 8 },
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginVertical: 2 },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   bubbleRowMe: { justifyContent: 'flex-end' },
   bubbleRowThem: { justifyContent: 'flex-start' },
   bubbleAvatar: {
@@ -476,8 +534,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   bubbleAvatarEmoji: { fontSize: 16 },
-  bubble: {
+  bubbleWrapper: {
+    flex: 1,
     maxWidth: '72%',
+    gap: 4,
+  },
+  bubble: {
     paddingVertical: 10, paddingHorizontal: 14,
     borderRadius: 18, borderWidth: 2, borderColor: '#1C1C2E',
     shadowColor: '#1C1C2E', shadowOffset: { width: 2, height: 2 },
@@ -490,6 +552,9 @@ const styles = StyleSheet.create({
   senderName: {
     fontSize: 11, fontWeight: '700', color: '#FF6B2B',
     marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  messageGroup: {
+    marginVertical: 2,
   },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyEmoji: { fontSize: 56 },

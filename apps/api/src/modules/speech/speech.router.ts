@@ -27,7 +27,7 @@ export function createSpeechRouter(container: AppContainer): Router {
         throw new AppError('Audio file too large (max 10 MB)', 413, 'AUDIO_TOO_LARGE');
       }
 
-      const text = await container.speechProvider.transcribe(audioBuffer, mimeType);
+      const text = await container.speechProvider.transcribe(audioBuffer, mimeType, req.user!.language);
       res.json({ text });
     } catch (err) {
       next(err);

@@ -12,8 +12,9 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
-import { getAccessToken } from '@/lib/auth/token-storage';
+import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/token-storage';
 import { apiRequest } from '@/lib/api-client';
+import type { AuthUser } from '@constractor/types';
 import type { ContactUser } from '@constractor/types';
 
 const EMOJIS = ['🐻', '🦊', '🐯', '🦁', '🐸', '🦄', '🐙', '🦋', '🐺', '🦅', '🦉', '🐨'];
@@ -50,6 +51,11 @@ export default function HomeScreen() {
   const [users, setUsers] = useState<ContactUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
+  const [me, setMe] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    void getStoredUser().then(setMe);
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -69,6 +75,18 @@ export default function HomeScreen() {
   useEffect(() => {
     if (tab === 'msg') void loadUsers();
   }, [tab, loadUsers]);
+
+  function handleLogout() {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout', style: 'destructive',
+        onPress: () => {
+          void clearSession().then(() => router.replace('/(auth)/login' as never));
+        },
+      },
+    ]);
+  }
 
   async function openChat(user: ContactUser, index: number) {
     setStarting(user.id);
@@ -102,6 +120,22 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🏗️ Constractor</Text>
+        <View style={styles.headerRight}>
+          {me && (
+            <UserAvatar
+              userId={me.id}
+              fallbackEmoji={EMOJIS[me.id.charCodeAt(0) % EMOJIS.length] ?? '😊'}
+              fallbackColor={COLORS[me.id.charCodeAt(0) % COLORS.length] ?? '#FF6B2B'}
+              size={38}
+            />
+          )}
+          <Pressable
+            style={({ pressed }) => [styles.logoutBtn, pressed && styles.logoutBtnPressed]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutBtnText}>⏻</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Tab pills */}
@@ -194,12 +228,37 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 2.5,
     borderBottomColor: '#1C1C2E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: {
     fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoutBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutBtnPressed: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  logoutBtnText: {
+    fontSize: 16,
+    color: '#FFFFFF',
   },
   tabRow: {
     flexDirection: 'row',
