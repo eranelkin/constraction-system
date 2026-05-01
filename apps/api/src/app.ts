@@ -7,13 +7,14 @@ import { createMessagingRouter } from './modules/messaging/messaging.router.js';
 import { createJobsRouter } from './modules/jobs/jobs.router.js';
 import { createMyRouter } from './modules/jobs/my.router.js';
 import { createUsersRouter } from './modules/users/users.router.js';
+import { createSpeechRouter } from './modules/speech/speech.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
 export function createApp(container: AppContainer): Express {
   const app = express();
 
   app.use(cors({ origin: config.CORS_ORIGINS, credentials: true }));
-  app.use(express.json());
+  app.use(express.json({ limit: '15mb' }));
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -28,6 +29,7 @@ export function createApp(container: AppContainer): Express {
   app.use('/jobs', createJobsRouter(container));
   app.use('/my', createMyRouter(container));
   app.use('/users', createUsersRouter(container));
+  app.use('/speech', createSpeechRouter(container));
 
   app.use(errorHandler);
 

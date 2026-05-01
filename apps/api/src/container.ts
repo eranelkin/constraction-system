@@ -1,5 +1,5 @@
 import { config } from '@constractor/config';
-import type { IAIProvider, IStorageProvider, IQueueProvider, IRealtimeProvider, IAuthProvider } from '@constractor/types';
+import type { IAIProvider, IStorageProvider, IQueueProvider, IRealtimeProvider, IAuthProvider, ISpeechProvider } from '@constractor/types';
 import { PostgreSQLAdapter } from './database/adapters/PostgreSQLAdapter.js';
 import { UserRepository } from './database/repositories/UserRepository.js';
 import { ConversationRepository } from './database/repositories/ConversationRepository.js';
@@ -11,6 +11,8 @@ import { MockAIProvider } from './providers/ai/MockAIProvider.js';
 import { LocalStorageProvider } from './providers/storage/LocalStorageProvider.js';
 import { InMemoryQueueProvider } from './providers/queue/InMemoryQueueProvider.js';
 import { InMemoryRealtimeProvider } from './providers/realtime/InMemoryRealtimeProvider.js';
+import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
+import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
 import type { IDatabase } from './database/DatabaseProvider.js';
 import type { IUserRepository } from './database/repositories/IUserRepository.js';
 import type { IConversationRepository } from './database/repositories/IConversationRepository.js';
@@ -30,6 +32,7 @@ export interface AppContainer {
   storageProvider: IStorageProvider;
   queueProvider: IQueueProvider;
   realtimeProvider: IRealtimeProvider;
+  speechProvider: ISpeechProvider;
 }
 
 export async function buildContainer(): Promise<AppContainer> {
@@ -57,6 +60,10 @@ export async function buildContainer(): Promise<AppContainer> {
     ? (() => { throw new Error('SocketIOProvider not yet implemented'); })()
     : new InMemoryRealtimeProvider();
 
+  const speechProvider: ISpeechProvider = config.USE_REAL_SPEECH
+    ? new GroqSpeechProvider(config.GROQ_API_KEY ?? (() => { throw new Error('GROQ_API_KEY is required when USE_REAL_SPEECH=true'); })())
+    : new MockSpeechProvider();
+
   return {
     db,
     userRepository,
@@ -69,5 +76,6 @@ export async function buildContainer(): Promise<AppContainer> {
     storageProvider,
     queueProvider,
     realtimeProvider,
+    speechProvider,
   };
 }

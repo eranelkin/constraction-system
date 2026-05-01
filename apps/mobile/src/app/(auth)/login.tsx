@@ -23,7 +23,7 @@ export default function LoginScreen() {
         body: { email, password },
       });
       await saveSession(result.user, result.tokens);
-      router.replace('/(jobs)' as never);
+      router.replace('/(home)' as never);
     } catch (err) {
       Alert.alert('Login failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {

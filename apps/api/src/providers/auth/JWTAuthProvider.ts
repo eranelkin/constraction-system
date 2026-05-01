@@ -51,6 +51,7 @@ export class JWTAuthProvider implements IAuthProvider {
       passwordHash,
       displayName: payload.displayName,
       role: payload.role,
+      language: 'en',
     });
 
     const tokens = await this.generateTokens(user.id);

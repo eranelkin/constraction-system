@@ -6,11 +6,39 @@ import Link from 'next/link';
 import { getStoredUser, clearSession } from '@/lib/auth/session';
 import type { AuthUser } from '@constractor/types';
 
+const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
   manager: 'Manager',
   member: 'Member',
 };
+
+function UserAvatar({ userId, displayName }: { userId: string; displayName: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = displayName.charAt(0).toUpperCase();
+  return failed ? (
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%',
+      background: 'var(--orange)', border: '2px solid rgba(255,255,255,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: '0.8rem', fontWeight: 900, color: '#fff', flexShrink: 0,
+    }}>
+      {initials}
+    </div>
+  ) : (
+    <img
+      src={`${API_URL}/users/${userId}/avatar`}
+      alt={displayName}
+      onError={() => setFailed(true)}
+      style={{
+        width: 32, height: 32, borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.4)',
+        objectFit: 'cover', flexShrink: 0,
+      }}
+    />
+  );
+}
 
 export default function ManageLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -84,6 +112,7 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
 
         {/* User info + logout */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <UserAvatar userId={user.id} displayName={user.displayName} />
           <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.875rem' }}>
             {user.displayName}
           </span>

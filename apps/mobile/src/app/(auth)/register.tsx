@@ -10,7 +10,7 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<'client' | 'contractor'>('contractor');
+  const [role, setRole] = useState<'manager' | 'member'>('member');
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
@@ -25,7 +25,7 @@ export default function RegisterScreen() {
         body: { email, password, displayName, role },
       });
       await saveSession(result.user, result.tokens);
-      router.replace('/(jobs)' as never);
+      router.replace('/(home)' as never);
     } catch (err) {
       Alert.alert('Registration failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -63,18 +63,18 @@ export default function RegisterScreen() {
       <Text style={styles.label}>I am a:</Text>
       <View style={styles.roleRow}>
         <Pressable
-          style={[styles.roleBtn, role === 'contractor' && styles.roleBtnActive]}
-          onPress={() => setRole('contractor')}
+          style={[styles.roleBtn, role === 'member' && styles.roleBtnActive]}
+          onPress={() => setRole('member')}
         >
-          <Text style={[styles.roleBtnText, role === 'contractor' && styles.roleBtnTextActive]}>
+          <Text style={[styles.roleBtnText, role === 'member' && styles.roleBtnTextActive]}>
             Worker
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.roleBtn, role === 'client' && styles.roleBtnActive]}
-          onPress={() => setRole('client')}
+          style={[styles.roleBtn, role === 'manager' && styles.roleBtnActive]}
+          onPress={() => setRole('manager')}
         >
-          <Text style={[styles.roleBtnText, role === 'client' && styles.roleBtnTextActive]}>
+          <Text style={[styles.roleBtnText, role === 'manager' && styles.roleBtnTextActive]}>
             Manager
           </Text>
         </Pressable>

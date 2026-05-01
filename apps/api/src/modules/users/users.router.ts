@@ -5,10 +5,33 @@ import { createAuthMiddleware, requireRole } from '../auth/auth.middleware.js';
 import { ForbiddenError, NotFoundError, AppError } from '../../shared/errors.js';
 import { createUserSchema, updateUserSchema } from './users.schema.js';
 
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
 export function createUsersRouter(container: AppContainer): Router {
   const router = Router();
   const { authProvider, userRepository } = container;
   const authenticate = createAuthMiddleware(authProvider);
+
+  // ── Public: serve avatar (no auth — profile pictures are not sensitive) ──
+
+  router.get('/:id/avatar', async (req, res, next) => {
+    try {
+      const { id } = req.params as { id: string };
+      const avatar = await userRepository.getAvatar(id);
+      if (!avatar) {
+        res.status(404).json({ error: 'No avatar' });
+        return;
+      }
+      res.setHeader('Content-Type', avatar.mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(avatar.data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ── All routes below require admin or manager ─────────────────────────────
 
   router.use(authenticate);
   router.use(requireRole('admin', 'manager'));
@@ -37,15 +60,20 @@ export function createUsersRouter(container: AppContainer): Router {
       if (existing) throw new AppError('Email already in use', 409, 'EMAIL_CONFLICT');
 
       const passwordHash = await bcrypt.hash(data.password, 12);
+
+      const avatar = data.avatar ? parseAvatar(data.avatar, data.avatarMimeType) : undefined;
+
       const user = await userRepository.create({
         email: data.email,
         displayName: data.displayName,
         role: data.role,
+        language: data.language,
         passwordHash,
+        ...(avatar && { avatarData: avatar.data, avatarMimeType: avatar.mimeType }),
       });
 
       const { passwordHash: _, ...publicUser } = user;
-      res.status(201).json({ user: publicUser });
+      res.status(201).json({ user: { ...publicUser, hasAvatar: avatar !== undefined } });
     } catch (err) {
       next(err);
     }
@@ -73,17 +101,30 @@ export function createUsersRouter(container: AppContainer): Router {
 
       const updateData: Parameters<typeof userRepository.update>[1] = {};
       if (data.displayName !== undefined) updateData.displayName = data.displayName;
-      if (data.email !== undefined) updateData.email = data.email;
-      if (data.role !== undefined) updateData.role = data.role;
-      if (data.password !== undefined) {
-        updateData.passwordHash = await bcrypt.hash(data.password, 12);
+      if (data.email !== undefined)       updateData.email = data.email;
+      if (data.role !== undefined)        updateData.role = data.role;
+      if (data.language !== undefined)    updateData.language = data.language;
+      if (data.password !== undefined)    updateData.passwordHash = await bcrypt.hash(data.password, 12);
+
+      // avatar: null → clear, string → update, absent → no change
+      if (data.avatar === null) {
+        updateData.avatarData = null;
+        updateData.avatarMimeType = null;
+      } else if (typeof data.avatar === 'string') {
+        const parsed = parseAvatar(data.avatar, data.avatarMimeType);
+        updateData.avatarData = parsed.data;
+        updateData.avatarMimeType = parsed.mimeType;
       }
 
       const updated = await userRepository.update(id, updateData);
       if (!updated) throw new NotFoundError('User');
 
       const { passwordHash: _, ...publicUser } = updated;
-      res.json({ user: publicUser });
+      const hasAvatar = updateData.avatarData !== undefined
+        ? updateData.avatarData !== null
+        : (await userRepository.getAvatar(id)) !== null;
+
+      res.json({ user: { ...publicUser, hasAvatar } });
     } catch (err) {
       next(err);
     }
@@ -103,7 +144,6 @@ export function createUsersRouter(container: AppContainer): Router {
       if (target.role === 'admin' && actor.role !== 'admin') {
         throw new ForbiddenError('Managers cannot delete admin accounts');
       }
-
       if (target.role === 'admin') {
         const adminCount = await userRepository.countByRole('admin');
         if (adminCount <= 1) throw new ForbiddenError('Cannot delete the last admin account');
@@ -117,4 +157,16 @@ export function createUsersRouter(container: AppContainer): Router {
   });
 
   return router;
+}
+
+function parseAvatar(base64: string, mimeType?: string): { data: Buffer; mimeType: string } {
+  const resolvedMime = mimeType ?? 'image/jpeg';
+  if (!ALLOWED_MIME.has(resolvedMime)) {
+    throw new AppError(`Unsupported image type: ${resolvedMime}`, 400, 'INVALID_MIME');
+  }
+  const data = Buffer.from(base64, 'base64');
+  if (data.byteLength > MAX_AVATAR_BYTES) {
+    throw new AppError('Avatar image too large (max 2 MB)', 413, 'AVATAR_TOO_LARGE');
+  }
+  return { data, mimeType: resolvedMime };
 }

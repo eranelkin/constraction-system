@@ -1,5 +1,10 @@
 import type { User, CreateUserDTO, UpdateUserDTO, PublicUser, ContactUser } from '@constractor/types';
 
+export interface AvatarData {
+  data: Buffer;
+  mimeType: string;
+}
+
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
@@ -9,4 +14,5 @@ export interface IUserRepository {
   update(id: string, data: UpdateUserDTO): Promise<User | null>;
   delete(id: string): Promise<void>;
   countByRole(role: string): Promise<number>;
+  getAvatar(id: string): Promise<AvatarData | null>;
 }

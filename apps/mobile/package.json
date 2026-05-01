@@ -4,7 +4,6 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "expo start --port 4502",
     "start": "expo start --port 4502",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -14,6 +13,8 @@
     "@constractor/types": "workspace:*",
     "@expo/metro-runtime": "^6.1.2",
     "expo": "~54.0.0",
+    "expo-av": "~15.0.2",
+    "expo-file-system": "~18.0.12",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",

@@ -3,3 +3,4 @@ export type * from './IStorageProvider.js';
 export type * from './IQueueProvider.js';
 export type * from './IRealtimeProvider.js';
 export type * from './IAuthProvider.js';
+export type * from './ISpeechProvider.js';
