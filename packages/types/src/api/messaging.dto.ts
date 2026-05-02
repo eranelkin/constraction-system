@@ -5,6 +5,7 @@ export interface ConversationSummary {
   updatedAt: Date;
   participants: Array<{ userId: string; displayName: string; lastReadAt: Date }>;
   lastMessage: { body: string; createdAt: Date } | null;
+  unreadCount: number;
 }
 
 export interface StartConversationRequest {

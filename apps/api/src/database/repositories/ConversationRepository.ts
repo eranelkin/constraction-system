@@ -21,6 +21,7 @@ interface SummaryRow {
   participants: Array<{ userId: string; displayName: string; lastReadAt: Date }> | null;
   last_message_body: string | null;
   last_message_created_at: Date | null;
+  unread_count: string;
 }
 
 function rowToParticipant(row: ParticipantRow): ConversationParticipant {
@@ -83,7 +84,14 @@ export class ConversationRepository implements IConversationRepository {
            WHERE cp2.conversation_id = c.id
          ) AS participants,
          m.body   AS last_message_body,
-         m.created_at AS last_message_created_at
+         m.created_at AS last_message_created_at,
+         (
+           SELECT COUNT(*)::text
+           FROM messages m2
+           WHERE m2.conversation_id = c.id
+             AND m2.created_at > cp.last_read_at
+             AND m2.sender_id != $1
+         ) AS unread_count
        FROM conversations c
        JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.user_id = $1
        LEFT JOIN LATERAL (
@@ -102,6 +110,7 @@ export class ConversationRepository implements IConversationRepository {
       lastMessage: row.last_message_body != null
         ? { body: row.last_message_body, createdAt: row.last_message_created_at as Date }
         : null,
+      unreadCount: parseInt(row.unread_count, 10),
     }));
   }
 

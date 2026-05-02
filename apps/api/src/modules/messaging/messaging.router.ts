@@ -35,6 +35,7 @@ export function createMessagingRouter(container: AppContainer): Router {
           lastReadAt: p.lastReadAt,
         })),
         lastMessage: null,
+        unreadCount: 0,
       };
       res.status(201).json({ conversation: summary });
     } catch (err) {

@@ -95,6 +95,17 @@ export default function ThreadScreen() {
     })();
   }, []);
 
+  // Mark conversation as read when opened
+  useEffect(() => {
+    if (!id) return;
+    void (async () => {
+      try {
+        const token = await fetchToken();
+        await apiRequest(`/messaging/conversations/${id}/read`, { method: 'POST', token });
+      } catch { /* ignore */ }
+    })();
+  }, [id, fetchToken]);
+
   // Message polling
   useEffect(() => {
     if (!id) return;
@@ -124,8 +135,13 @@ export default function ThreadScreen() {
         const token = await fetchToken();
         const data = await apiRequest<ListMessagesResponse>(url, { token });
         if (data.messages.length > 0) {
-          setMessages((prev) => [...prev, ...data.messages]);
-          lastIdRef.current = data.messages.at(-1)?.id;
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = data.messages.filter((m) => !existingIds.has(m.id));
+            if (newMsgs.length === 0) return prev;
+            lastIdRef.current = newMsgs.at(-1)?.id ?? lastIdRef.current;
+            return [...prev, ...newMsgs];
+          });
         }
       } catch {
         // ignore poll errors
@@ -147,7 +163,6 @@ export default function ThreadScreen() {
       );
       setMessages((prev) => [...prev, data.message]);
       lastIdRef.current = data.message.id;
-      flatListRef.current?.scrollToEnd({ animated: true });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
     }
@@ -253,7 +268,6 @@ export default function ThreadScreen() {
       );
       setMessages((prev) => [...prev, data.message]);
       lastIdRef.current = data.message.id;
-      flatListRef.current?.scrollToEnd({ animated: true });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
     }
@@ -375,12 +389,12 @@ export default function ThreadScreen() {
       >
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={[...messages].reverse()}
+          inverted
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>👋</Text>

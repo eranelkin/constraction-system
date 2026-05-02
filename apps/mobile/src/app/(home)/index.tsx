@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,10 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/token-storage';
 import { apiRequest } from '@/lib/api-client';
-import type { AuthUser } from '@constractor/types';
-import type { ContactUser, PublicGroup } from '@constractor/types';
+import type { AuthUser, ContactUser, PublicGroup, ConversationSummary } from '@constractor/types';
 
 const EMOJIS = ['🐻', '🦊', '🐯', '🦁', '🐸', '🦄', '🐙', '🦋', '🐺', '🦅', '🦉', '🐨'];
 const COLORS = ['#FF6B2B', '#FFD93D', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF'];
@@ -56,6 +55,15 @@ function GroupAvatar({ emoji, color, size }: { emoji: string; color: string; siz
   );
 }
 
+function UnreadBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{count > 99 ? '99+' : String(count)}</Text>
+    </View>
+  );
+}
+
 type Tab = 'msg' | 'tasks';
 
 type ListItem =
@@ -67,24 +75,51 @@ export default function HomeScreen() {
   const [tab, setTab] = useState<Tab>('msg');
   const [users, setUsers] = useState<ContactUser[]>([]);
   const [groups, setGroups] = useState<PublicGroup[]>([]);
+  const [contactUnread, setContactUnread] = useState<Map<string, number>>(new Map());
+  const [groupUnread, setGroupUnread] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [me, setMe] = useState<AuthUser | null>(null);
+  const meRef = useRef<AuthUser | null>(null);
 
   useEffect(() => {
-    void getStoredUser().then(setMe);
+    void getStoredUser().then((u) => {
+      setMe(u);
+      meRef.current = u;
+    });
   }, []);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (myId?: string) => {
+    // Resolve current user ID if not provided (useFocusEffect fires before getStoredUser resolves)
+    const resolvedMyId = myId ?? meRef.current?.id ?? (await getStoredUser())?.id;
     setLoading(true);
     try {
       const token = await getAccessToken();
-      const [usersData, groupsData] = await Promise.all([
-        apiRequest<{ users: ContactUser[] }>('/auth/users', { token: token ?? undefined }),
-        apiRequest<{ groups: PublicGroup[] }>('/groups/mine', { token: token ?? undefined }),
+      const t = token ?? undefined;
+      const [usersData, groupsData, convsData] = await Promise.all([
+        apiRequest<{ users: ContactUser[] }>('/auth/users', { token: t }),
+        apiRequest<{ groups: PublicGroup[] }>('/groups/mine', { token: t }),
+        apiRequest<{ conversations: ConversationSummary[] }>('/messaging/conversations', { token: t }),
       ]);
       setUsers(usersData.users);
       setGroups(groupsData.groups);
+
+      const newContactUnread = new Map<string, number>();
+      const newGroupUnread = new Map<string, number>();
+      const groupConvIds = new Set(groupsData.groups.map((g) => g.conversationId).filter((id): id is string => id !== null));
+
+      for (const conv of convsData.conversations) {
+        if (conv.unreadCount === 0) continue;
+        if (groupConvIds.has(conv.id)) {
+          const group = groupsData.groups.find((g) => g.conversationId === conv.id);
+          if (group) newGroupUnread.set(group.id, conv.unreadCount);
+        } else {
+          const other = conv.participants.find((p) => p.userId !== resolvedMyId);
+          if (other) newContactUnread.set(other.userId, conv.unreadCount);
+        }
+      }
+      setContactUnread(newContactUnread);
+      setGroupUnread(newGroupUnread);
     } catch {
       Alert.alert('Error', 'Could not load messages');
     } finally {
@@ -92,9 +127,17 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // Initial load when tab switches to msg
   useEffect(() => {
-    if (tab === 'msg') void loadData();
+    if (tab === 'msg') void loadData(meRef.current?.id);
   }, [tab, loadData]);
+
+  // Refresh unread counts every time screen comes into focus (returning from chat)
+  useFocusEffect(
+    useCallback(() => {
+      void loadData(meRef.current?.id);
+    }, [loadData]),
+  );
 
   function handleLogout() {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -138,7 +181,6 @@ export default function HomeScreen() {
       Alert.alert('Error', 'This group has no conversation yet');
       return;
     }
-    setStarting(group.id);
     router.push({
       pathname: '/(messages)/[id]',
       params: {
@@ -149,7 +191,6 @@ export default function HomeScreen() {
         avatarColor: group.color ?? '#4ECDC4',
       },
     } as never);
-    setStarting(null);
   }
 
   const listData: ListItem[] = [];
@@ -228,6 +269,7 @@ export default function HomeScreen() {
                 const emoji = EMOJIS[item.index % EMOJIS.length] ?? '😊';
                 const color = COLORS[item.index % COLORS.length] ?? '#FF6B2B';
                 const isLoading = starting === item.user.id;
+                const unread = contactUnread.get(item.user.id) ?? 0;
                 return (
                   <Pressable
                     style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
@@ -244,7 +286,10 @@ export default function HomeScreen() {
                     {isLoading ? (
                       <ActivityIndicator size="small" color="#FF6B2B" />
                     ) : (
-                      <Text style={styles.chevron}>›</Text>
+                      <View style={styles.cardRight}>
+                        <UnreadBadge count={unread} />
+                        <Text style={styles.chevron}>›</Text>
+                      </View>
                     )}
                   </Pressable>
                 );
@@ -252,6 +297,7 @@ export default function HomeScreen() {
               // group item
               const g = item.group;
               const isLoading = starting === g.id;
+              const unread = groupUnread.get(g.id) ?? 0;
               return (
                 <Pressable
                   style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
@@ -267,7 +313,10 @@ export default function HomeScreen() {
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#FF6B2B" />
                   ) : (
-                    <Text style={styles.chevron}>›</Text>
+                    <View style={styles.cardRight}>
+                      <UnreadBadge count={unread} />
+                      <Text style={styles.chevron}>›</Text>
+                    </View>
                   )}
                 </Pressable>
               );
@@ -431,6 +480,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#999',
     marginTop: 2,
+  },
+  cardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badge: {
+    backgroundColor: '#2ECC71',
+    borderRadius: 999,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#1C1C2E',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   chevron: {
     fontSize: 30,
