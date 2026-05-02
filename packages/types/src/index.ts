@@ -6,3 +6,5 @@ export type * from './api/auth.dto.js';
 export type * from './api/messaging.dto.js';
 export type * from './api/jobs.dto.js';
 export type * from './api/users.dto.js';
+export type * from './domain/Group.js';
+export type * from './api/groups.dto.js';

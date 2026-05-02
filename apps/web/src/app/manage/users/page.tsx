@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { apiRequest } from '@/lib/api-client';
 import { getAccessToken, getStoredUser } from '@/lib/auth/session';
-import type { ListUsersResponse, CreateUserRequest, UpdateUserRequest, UserResponse, PublicUser } from '@constractor/types';
+import type { ListUsersResponse, CreateUserRequest, UpdateUserRequest, UserResponse, PublicUser, ListGroupsResponse, PublicGroup } from '@constractor/types';
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 
@@ -48,11 +48,12 @@ interface UserFormData {
   language: string;
   avatarFile: File | null;
   deleteAvatar: boolean;
+  groupIds: string[];
 }
 
 const EMPTY_FORM: UserFormData = {
   displayName: '', email: '', password: '', role: 'member', language: 'en',
-  avatarFile: null, deleteAvatar: false,
+  avatarFile: null, deleteAvatar: false, groupIds: [],
 };
 
 function avatarUrl(userId: string, bust: number) {
@@ -70,6 +71,7 @@ async function fileToBase64(file: File): Promise<string> {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<PublicUser[]>([]);
+  const [groups, setGroups] = useState<PublicGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [formMode, setFormMode] = useState<FormMode | null>(null);
   const [editTarget, setEditTarget] = useState<PublicUser | null>(null);
@@ -90,8 +92,12 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      const data = await apiRequest<ListUsersResponse>('/users', { token: token() });
-      setUsers(data.users);
+      const [uData, gData] = await Promise.all([
+        apiRequest<ListUsersResponse>('/users', { token: token() }),
+        apiRequest<ListGroupsResponse>('/groups', { token: token() }),
+      ]);
+      setUsers(uData.users);
+      setGroups(gData.groups);
     } catch (err) {
       setPageError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
@@ -112,7 +118,8 @@ export default function UsersPage() {
   function openEdit(user: PublicUser) {
     setFormMode('edit');
     setEditTarget(user);
-    setForm({ displayName: user.displayName, email: user.email, password: '', role: user.role, language: user.language, avatarFile: null, deleteAvatar: false });
+    const userGroupIds = groups.filter((g) => g.members.some((m) => m.userId === user.id)).map((g) => g.id);
+    setForm({ displayName: user.displayName, email: user.email, password: '', role: user.role, language: user.language, avatarFile: null, deleteAvatar: false, groupIds: userGroupIds });
     setAvatarPreview(null);
     setFormError(null);
   }
@@ -165,7 +172,10 @@ export default function UsersPage() {
           body.avatar = await fileToBase64(form.avatarFile);
           body.avatarMimeType = form.avatarFile.type;
         }
-        await apiRequest<UserResponse>('/users', { method: 'POST', body, token: token() });
+        const created = await apiRequest<UserResponse>('/users', { method: 'POST', body, token: token() });
+        if (form.groupIds.length > 0) {
+          await apiRequest(`/groups/user/${created.user.id}/memberships`, { method: 'PUT', body: { groupIds: form.groupIds }, token: token() });
+        }
 
       } else if (formMode === 'edit' && editTarget) {
         const body: UpdateUserRequest = {
@@ -182,6 +192,7 @@ export default function UsersPage() {
           body.avatarMimeType = form.avatarFile.type;
         }
         await apiRequest<UserResponse>(`/users/${editTarget.id}`, { method: 'PATCH', body, token: token() });
+        await apiRequest(`/groups/user/${editTarget.id}/memberships`, { method: 'PUT', body: { groupIds: form.groupIds }, token: token() });
         // bump cache-bust so the img tag reloads
         setAvatarBust((prev) => ({ ...prev, [editTarget.id]: Date.now() }));
       }
@@ -321,6 +332,33 @@ export default function UsersPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Groups multi-select */}
+              {groups.length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="field-label">Groups ({form.groupIds.length} selected)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
+                    {groups.map((g) => {
+                      const selected = form.groupIds.includes(g.id);
+                      return (
+                        <button key={g.id} type="button"
+                          onClick={() => setForm((f) => ({ ...f, groupIds: selected ? f.groupIds.filter((id) => id !== g.id) : [...f.groupIds, g.id] }))}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                            padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                            fontWeight: 700, fontSize: '0.85rem',
+                            background: selected ? (g.color ?? 'var(--orange)') : '#fff',
+                            color: selected ? '#fff' : 'var(--navy)',
+                            border: selected ? `2.5px solid var(--navy)` : '2px solid #ddd',
+                            boxShadow: selected ? 'var(--shadow-sm)' : 'none',
+                          }}>
+                          {g.emoji ?? '🏘️'} {g.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
             </div>
 

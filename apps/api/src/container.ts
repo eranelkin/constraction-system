@@ -11,6 +11,7 @@ import { MockAIProvider } from './providers/ai/MockAIProvider.js';
 import { LocalStorageProvider } from './providers/storage/LocalStorageProvider.js';
 import { InMemoryQueueProvider } from './providers/queue/InMemoryQueueProvider.js';
 import { InMemoryRealtimeProvider } from './providers/realtime/InMemoryRealtimeProvider.js';
+import { GroupRepository } from './database/repositories/GroupRepository.js';
 import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
 import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
 import { MockTranslationProvider } from './providers/translation/MockTranslationProvider.js';
@@ -21,6 +22,7 @@ import type { IConversationRepository } from './database/repositories/IConversat
 import type { IMessageRepository } from './database/repositories/IMessageRepository.js';
 import type { IJobRepository } from './database/repositories/IJobRepository.js';
 import type { IJobApplicationRepository } from './database/repositories/IJobApplicationRepository.js';
+import type { IGroupRepository } from './database/repositories/IGroupRepository.js';
 
 export interface AppContainer {
   db: IDatabase;
@@ -36,6 +38,7 @@ export interface AppContainer {
   realtimeProvider: IRealtimeProvider;
   speechProvider: ISpeechProvider;
   translationProvider: ITranslationProvider;
+  groupRepository: IGroupRepository;
 }
 
 export async function buildContainer(): Promise<AppContainer> {
@@ -45,6 +48,7 @@ export async function buildContainer(): Promise<AppContainer> {
   const messageRepository = new MessageRepository(db);
   const jobRepository = new JobRepository(db);
   const jobApplicationRepository = new JobApplicationRepository(db);
+  const groupRepository = new GroupRepository(db);
   const authProvider = new JWTAuthProvider(userRepository, db, config);
 
   const aiProvider: IAIProvider = config.USE_REAL_AI
@@ -86,5 +90,6 @@ export async function buildContainer(): Promise<AppContainer> {
     realtimeProvider,
     speechProvider,
     translationProvider,
+    groupRepository,
   };
 }

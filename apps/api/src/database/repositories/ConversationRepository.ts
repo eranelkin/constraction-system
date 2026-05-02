@@ -130,6 +130,49 @@ export class ConversationRepository implements IConversationRepository {
     return row !== null;
   }
 
+  async createGroupConversation(participantIds: string[], name: string): Promise<Conversation> {
+    return this.db.transaction(async (tx) => {
+      const conv = await tx.queryOne<ConversationRow>(
+        `INSERT INTO conversations (name, type) VALUES ($1, 'group')
+         RETURNING id, created_at, updated_at`,
+        [name],
+      );
+      if (!conv) throw new Error('Group conversation creation failed');
+
+      if (participantIds.length > 0) {
+        const placeholders = participantIds.map((_, i) => `($1, $${i + 2})`).join(', ');
+        await tx.query(
+          `INSERT INTO conversation_participants (conversation_id, user_id) VALUES ${placeholders}`,
+          [conv.id, ...participantIds],
+        );
+      }
+
+      return this.fetchWithParticipants(conv, tx);
+    });
+  }
+
+  async renameGroupConversation(conversationId: string, name: string): Promise<void> {
+    await this.db.query(
+      'UPDATE conversations SET name = $1 WHERE id = $2',
+      [name, conversationId],
+    );
+  }
+
+  async addParticipant(conversationId: string, userId: string): Promise<void> {
+    await this.db.query(
+      `INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+      [conversationId, userId],
+    );
+  }
+
+  async removeParticipant(conversationId: string, userId: string): Promise<void> {
+    await this.db.query(
+      'DELETE FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+      [conversationId, userId],
+    );
+  }
+
   private async fetchWithParticipants(
     conv: ConversationRow,
     db: IDatabase = this.db,

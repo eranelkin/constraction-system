@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+const SENDER_COLORS = ['#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF', '#FFD93D', '#FF6B2B'];
 
 function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   userId: string; fallbackEmoji: string; fallbackColor: string; size: number;
@@ -50,17 +51,19 @@ import * as FileSystem from 'expo-file-system';
 type VoicePhase = 'recording' | 'transcribing' | 'editing';
 
 export default function ThreadScreen() {
-  const { id, userName, userId: participantId, avatarEmoji, avatarColor } = useLocalSearchParams<{
+  const { id, userName, userId: participantId, avatarEmoji, avatarColor, isGroup } = useLocalSearchParams<{
     id: string;
     userName?: string;
     userId?: string;
     avatarEmoji?: string;
     avatarColor?: string;
+    isGroup?: string;
   }>();
 
   const displayName = userName ?? 'Chat';
   const emoji = avatarEmoji ?? '💬';
   const color = avatarColor ?? '#FF6B2B';
+  const isGroupChat = isGroup === 'true';
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -310,7 +313,14 @@ export default function ThreadScreen() {
     const translated = translations[item.id];
     const isTranslating = translating[item.id] ?? false;
 
-    const avatarNode = participantId ? (
+    const senderInitial = (item.senderName ?? '?').charAt(0).toUpperCase();
+    const senderColor = SENDER_COLORS[item.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
+
+    const avatarNode = isGroupChat ? (
+      <View style={[styles.bubbleAvatar, { backgroundColor: senderColor }]}>
+        <Text style={styles.bubbleAvatarInitial}>{senderInitial}</Text>
+      </View>
+    ) : participantId ? (
       <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={32} />
     ) : (
       <View style={[styles.bubbleAvatar, { backgroundColor: color }]}>
@@ -534,6 +544,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   bubbleAvatarEmoji: { fontSize: 16 },
+  bubbleAvatarInitial: { fontSize: 14, fontWeight: '900', color: '#1C1C2E' },
   bubbleWrapper: {
     flex: 1,
     maxWidth: '72%',

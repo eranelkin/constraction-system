@@ -70,18 +70,20 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
         padding: '0 2rem',
         display: 'flex',
         alignItems: 'center',
-        gap: '2rem',
+        gap: '1rem',
         height: '60px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: 'auto' }}>
-          <span style={{ fontSize: '1.4rem' }}>🏗️</span>
-          <span style={{ color: 'var(--yellow)', fontWeight: 900, fontSize: '1.1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            Constractor
-          </span>
-        </div>
+        {/* Logo + Tabs grouped on the left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginRight: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+            <span style={{ fontSize: '1.4rem' }}>🏗️</span>
+            <span style={{ color: 'var(--yellow)', fontWeight: 900, fontSize: '1.1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              Constractor
+            </span>
+          </div>
 
-        {/* Tabs */}
-        <nav style={{ display: 'flex', gap: '0.25rem' }}>
+          {/* Tabs */}
+          <nav style={{ display: 'flex', gap: '0.25rem' }}>
           <Link href="/manage/users" style={{
             padding: '0.4rem 1.2rem',
             borderRadius: 'var(--radius-pill)',
@@ -94,6 +96,19 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
             transition: 'all 0.15s',
           }}>
             👥 Users
+          </Link>
+          <Link href="/manage/groups" style={{
+            padding: '0.4rem 1.2rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            textDecoration: 'none',
+            background: pathname.startsWith('/manage/groups') ? 'var(--orange)' : 'transparent',
+            color: pathname.startsWith('/manage/groups') ? '#fff' : 'rgba(255,255,255,0.65)',
+            border: pathname.startsWith('/manage/groups') ? 'var(--border)' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            🏘️ Groups
           </Link>
           <Link href="/manage/tasks" style={{
             padding: '0.4rem 1.2rem',
@@ -108,7 +123,8 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
           }}>
             ✅ Tasks
           </Link>
-        </nav>
+          </nav>
+        </div>
 
         {/* User info + logout */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

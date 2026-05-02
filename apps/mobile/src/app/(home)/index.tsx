@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/token-storage';
 import { apiRequest } from '@/lib/api-client';
 import type { AuthUser } from '@constractor/types';
-import type { ContactUser } from '@constractor/types';
+import type { ContactUser, PublicGroup } from '@constractor/types';
 
 const EMOJIS = ['🐻', '🦊', '🐯', '🦁', '🐸', '🦄', '🐙', '🦋', '🐺', '🦅', '🦉', '🐨'];
 const COLORS = ['#FF6B2B', '#FFD93D', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF'];
@@ -44,11 +44,29 @@ function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   );
 }
 
+function GroupAvatar({ emoji, color, size }: { emoji: string; color: string; size: number }) {
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      borderWidth: 2.5, borderColor: '#1C1C2E', backgroundColor: color,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.45 }}>{emoji}</Text>
+    </View>
+  );
+}
+
 type Tab = 'msg' | 'tasks';
+
+type ListItem =
+  | { kind: 'header'; title: string }
+  | { kind: 'contact'; user: ContactUser; index: number }
+  | { kind: 'group'; group: PublicGroup };
 
 export default function HomeScreen() {
   const [tab, setTab] = useState<Tab>('msg');
   const [users, setUsers] = useState<ContactUser[]>([]);
+  const [groups, setGroups] = useState<PublicGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [me, setMe] = useState<AuthUser | null>(null);
@@ -57,24 +75,26 @@ export default function HomeScreen() {
     void getStoredUser().then(setMe);
   }, []);
 
-  const loadUsers = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getAccessToken();
-      const data = await apiRequest<{ users: ContactUser[] }>('/auth/users', {
-        token: token ?? undefined,
-      });
-      setUsers(data.users);
+      const [usersData, groupsData] = await Promise.all([
+        apiRequest<{ users: ContactUser[] }>('/auth/users', { token: token ?? undefined }),
+        apiRequest<{ groups: PublicGroup[] }>('/groups/mine', { token: token ?? undefined }),
+      ]);
+      setUsers(usersData.users);
+      setGroups(groupsData.groups);
     } catch {
-      Alert.alert('Error', 'Could not load team members');
+      Alert.alert('Error', 'Could not load messages');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (tab === 'msg') void loadUsers();
-  }, [tab, loadUsers]);
+    if (tab === 'msg') void loadData();
+  }, [tab, loadData]);
 
   function handleLogout() {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -111,6 +131,35 @@ export default function HomeScreen() {
     } finally {
       setStarting(null);
     }
+  }
+
+  function openGroup(group: PublicGroup) {
+    if (!group.conversationId) {
+      Alert.alert('Error', 'This group has no conversation yet');
+      return;
+    }
+    setStarting(group.id);
+    router.push({
+      pathname: '/(messages)/[id]',
+      params: {
+        id: group.conversationId,
+        userName: group.name,
+        isGroup: 'true',
+        avatarEmoji: group.emoji ?? '🏘️',
+        avatarColor: group.color ?? '#4ECDC4',
+      },
+    } as never);
+    setStarting(null);
+  }
+
+  const listData: ListItem[] = [];
+  if (users.length > 0) {
+    listData.push({ kind: 'header', title: '💬 Direct Messages' });
+    users.forEach((user, index) => listData.push({ kind: 'contact', user, index }));
+  }
+  if (groups.length > 0) {
+    listData.push({ kind: 'header', title: '🏘️ Groups' });
+    groups.forEach((group) => listData.push({ kind: 'group', group }));
   }
 
   return (
@@ -159,33 +208,61 @@ export default function HomeScreen() {
         loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#FF6B2B" />
-            <Text style={styles.loadingText}>Loading team…</Text>
+            <Text style={styles.loadingText}>Loading…</Text>
           </View>
         ) : (
           <FlatList
-            data={users}
-            keyExtractor={(u) => u.id}
+            data={listData}
+            keyExtractor={(item) => {
+              if (item.kind === 'header') return `header-${item.title}`;
+              if (item.kind === 'contact') return `contact-${item.user.id}`;
+              return `group-${item.group.id}`;
+            }}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item, index }) => {
-              const emoji = EMOJIS[index % EMOJIS.length] ?? '😊';
-              const color = COLORS[index % COLORS.length] ?? '#FF6B2B';
-              const isLoading = starting === item.id;
+            renderItem={({ item }) => {
+              if (item.kind === 'header') {
+                return <Text style={styles.sectionHeader}>{item.title}</Text>;
+              }
+              if (item.kind === 'contact') {
+                const emoji = EMOJIS[item.index % EMOJIS.length] ?? '😊';
+                const color = COLORS[item.index % COLORS.length] ?? '#FF6B2B';
+                const isLoading = starting === item.user.id;
+                return (
+                  <Pressable
+                    style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
+                    onPress={() => void openChat(item.user, item.index)}
+                    disabled={isLoading}
+                  >
+                    <UserAvatar userId={item.user.id} fallbackEmoji={emoji} fallbackColor={color} size={60} />
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.cardName}>{item.user.displayName}</Text>
+                      <Text style={styles.cardSub}>
+                        {item.user.role === 'manager' ? '👔 Manager' : item.user.role === 'admin' ? '⭐ Admin' : '👷 Worker'}
+                      </Text>
+                    </View>
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#FF6B2B" />
+                    ) : (
+                      <Text style={styles.chevron}>›</Text>
+                    )}
+                  </Pressable>
+                );
+              }
+              // group item
+              const g = item.group;
+              const isLoading = starting === g.id;
               return (
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.card,
-                    (pressed || isLoading) && styles.cardPressed,
-                  ]}
-                  onPress={() => void openChat(item, index)}
+                  style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
+                  onPress={() => openGroup(g)}
                   disabled={isLoading}
                 >
-                  <UserAvatar userId={item.id} fallbackEmoji={emoji} fallbackColor={color} size={60} />
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{item.displayName}</Text>
-                    <Text style={styles.userRole}>
-                      {item.role === 'manager' ? '👔 Manager' : item.role === 'admin' ? '⭐ Admin' : '👷 Worker'}
-                    </Text>
+                  <GroupAvatar emoji={g.emoji ?? '🏘️'} color={g.color ?? '#4ECDC4'} size={60} />
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{g.name}</Text>
+                    <Text style={styles.cardSub}>👥 {g.memberCount} member{g.memberCount !== 1 ? 's' : ''}</Text>
+                    {g.description ? <Text style={styles.cardDesc} numberOfLines={1}>{g.description}</Text> : null}
                   </View>
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#FF6B2B" />
@@ -303,8 +380,18 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
-    gap: 12,
+    gap: 10,
     paddingBottom: 32,
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 4,
+    marginBottom: 2,
+    paddingHorizontal: 4,
   },
   card: {
     flexDirection: 'row',
@@ -325,31 +412,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 1, height: 1 },
     transform: [{ translateX: 3 }, { translateY: 3 }],
   },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2.5,
-    borderColor: '#1C1C2E',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarEmoji: {
-    fontSize: 32,
-  },
-  userInfo: {
+  cardInfo: {
     flex: 1,
   },
-  userName: {
+  cardName: {
     fontSize: 19,
     fontWeight: '800',
     color: '#1C1C2E',
   },
-  userRole: {
+  cardSub: {
     fontSize: 13,
     fontWeight: '600',
     color: '#666',
     marginTop: 3,
+  },
+  cardDesc: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#999',
+    marginTop: 2,
   },
   chevron: {
     fontSize: 30,

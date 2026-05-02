@@ -9,6 +9,7 @@ import { createMyRouter } from './modules/jobs/my.router.js';
 import { createUsersRouter } from './modules/users/users.router.js';
 import { createSpeechRouter } from './modules/speech/speech.router.js';
 import { createTranslateRouter } from './modules/translate/translate.router.js';
+import { createGroupsRouter } from './modules/groups/groups.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
 export function createApp(container: AppContainer): Express {
@@ -32,6 +33,7 @@ export function createApp(container: AppContainer): Express {
   app.use('/users', createUsersRouter(container));
   app.use('/speech', createSpeechRouter(container));
   app.use('/translate', createTranslateRouter(container));
+  app.use('/groups', createGroupsRouter(container));
 
   app.use(errorHandler);
 
