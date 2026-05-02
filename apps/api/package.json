@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "db:migrate": "node --env-file=.env --import tsx/esm src/database/migrate.ts",
     "db:seed": "node --env-file=.env --import tsx/esm src/database/seeds/dev-users.ts",
+    "db:seed-test": "node --env-file=.env --import tsx/esm src/database/seeds/seed-test-users.ts",
     "test": "node --env-file=.env ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --env-file=.env ./node_modules/vitest/vitest.mjs",
     "test:coverage": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --coverage"

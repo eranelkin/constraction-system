@@ -66,6 +66,8 @@ export class JWTAuthProvider implements IAuthProvider {
     const valid = await bcrypt.compare(credentials.password, user.passwordHash);
     if (!valid) throw new AppError('Invalid email or password', 401);
 
+    if (!user.isActive) throw new AppError('Account is deactivated', 403);
+
     const tokens = await this.generateTokens(user.id);
     return { user: this.toAuthUser(user), tokens };
   }
@@ -137,6 +139,7 @@ export class JWTAuthProvider implements IAuthProvider {
   private async generateTokens(userId: string): Promise<AuthTokens> {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new AppError('User not found', 404);
+    if (!user.isActive) throw new AppError('Account is deactivated', 403);
 
     const payload: JWTPayload = {
       sub: user.id,

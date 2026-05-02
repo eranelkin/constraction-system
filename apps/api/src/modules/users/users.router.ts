@@ -130,6 +130,38 @@ export function createUsersRouter(container: AppContainer): Router {
     }
   });
 
+  // PATCH /users/:id/active — activate or deactivate a user
+  router.patch('/:id/active', async (req, res, next) => {
+    try {
+      const { id } = req.params as { id: string };
+      const actor = req.user!;
+
+      if (id === actor.id) throw new ForbiddenError('You cannot deactivate your own account');
+
+      const target = await userRepository.findById(id);
+      if (!target) throw new NotFoundError('User');
+
+      if (target.role === 'admin' && actor.role !== 'admin') {
+        throw new ForbiddenError('Managers cannot change active status of admin accounts');
+      }
+
+      const { isActive } = req.body as { isActive: boolean };
+      if (typeof isActive !== 'boolean') {
+        res.status(400).json({ error: 'isActive must be a boolean' });
+        return;
+      }
+
+      const updated = await userRepository.update(id, { isActive });
+      if (!updated) throw new NotFoundError('User');
+
+      const { passwordHash: _, ...publicUser } = updated;
+      const hasAvatar = (await userRepository.getAvatar(id)) !== null;
+      res.json({ user: { ...publicUser, hasAvatar } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // DELETE /users/:id — delete user
   router.delete('/:id', async (req, res, next) => {
     try {

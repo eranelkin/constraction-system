@@ -73,4 +73,16 @@ docker exec constractor_postgres pg_dump -U constractor constractor_dev > constr
 apps/api/src/database/migrations/
 ```
 
-Each file is numbered sequentially (e.g. `006_groups.sql`). The migration runner tracks which have been applied and only runs new ones — it is safe to run `db:migrate` multiple times.
+Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migration runner tracks which have been applied and only runs new ones — it is safe to run `db:migrate` multiple times.
+
+## Migration history
+
+| File | What it does |
+|---|---|
+| `001_initial.sql` | `users` and `refresh_tokens` tables |
+| `002_messages.sql` | `messages` table |
+| `003_jobs.sql` | `jobs` table |
+| `004_rename_roles_and_seed.sql` | Renames roles: client → manager, contractor → member |
+| `005_user_language_avatar.sql` | Adds `language`, `avatar_data`, `avatar_mime_type` to `users` |
+| `006_groups.sql` | `groups` and `group_members` tables |
+| `007_user_is_active.sql` | Adds `is_active BOOLEAN NOT NULL DEFAULT true` to `users` |

@@ -14,11 +14,15 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/token-storage';
 import { apiRequest } from '@/lib/api-client';
+import { ms, s, vs } from '@/lib/responsive';
 import type { AuthUser, ContactUser, PublicGroup, ConversationSummary } from '@constractor/types';
 
 const EMOJIS = ['🐻', '🦊', '🐯', '🦁', '🐸', '🦄', '🐙', '🦋', '🐺', '🦅', '🦉', '🐨'];
 const COLORS = ['#FF6B2B', '#FFD93D', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF'];
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+
+const AVATAR_SIZE = s(52);
+const HEADER_AVATAR_SIZE = s(34);
 
 function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   userId: string; fallbackEmoji: string; fallbackColor: string; size: number;
@@ -29,6 +33,7 @@ function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
       width: size, height: size, borderRadius: size / 2,
       borderWidth: 2.5, borderColor: '#1C1C2E', backgroundColor: fallbackColor,
       overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
     }}>
       {!failed ? (
         <Image
@@ -49,6 +54,7 @@ function GroupAvatar({ emoji, color, size }: { emoji: string; color: string; siz
       width: size, height: size, borderRadius: size / 2,
       borderWidth: 2.5, borderColor: '#1C1C2E', backgroundColor: color,
       alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
     }}>
       <Text style={{ fontSize: size * 0.45 }}>{emoji}</Text>
     </View>
@@ -90,7 +96,6 @@ export default function HomeScreen() {
   }, []);
 
   const loadData = useCallback(async (myId?: string) => {
-    // Resolve current user ID if not provided (useFocusEffect fires before getStoredUser resolves)
     const resolvedMyId = myId ?? meRef.current?.id ?? (await getStoredUser())?.id;
     setLoading(true);
     try {
@@ -127,12 +132,10 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Initial load when tab switches to msg
   useEffect(() => {
     if (tab === 'msg') void loadData(meRef.current?.id);
   }, [tab, loadData]);
 
-  // Refresh unread counts every time screen comes into focus (returning from chat)
   useFocusEffect(
     useCallback(() => {
       void loadData(meRef.current?.id);
@@ -209,14 +212,14 @@ export default function HomeScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>🏗️ Constractor</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>🏗️ Constractor</Text>
         <View style={styles.headerRight}>
           {me && (
             <UserAvatar
               userId={me.id}
               fallbackEmoji={EMOJIS[me.id.charCodeAt(0) % EMOJIS.length] ?? '😊'}
               fallbackColor={COLORS[me.id.charCodeAt(0) % COLORS.length] ?? '#FF6B2B'}
-              size={38}
+              size={HEADER_AVATAR_SIZE}
             />
           )}
           <Pressable
@@ -276,10 +279,10 @@ export default function HomeScreen() {
                     onPress={() => void openChat(item.user, item.index)}
                     disabled={isLoading}
                   >
-                    <UserAvatar userId={item.user.id} fallbackEmoji={emoji} fallbackColor={color} size={60} />
+                    <UserAvatar userId={item.user.id} fallbackEmoji={emoji} fallbackColor={color} size={AVATAR_SIZE} />
                     <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{item.user.displayName}</Text>
-                      <Text style={styles.cardSub}>
+                      <Text style={styles.cardName} numberOfLines={1}>{item.user.displayName}</Text>
+                      <Text style={styles.cardSub} numberOfLines={1}>
                         {item.user.role === 'manager' ? '👔 Manager' : item.user.role === 'admin' ? '⭐ Admin' : '👷 Worker'}
                       </Text>
                     </View>
@@ -294,7 +297,6 @@ export default function HomeScreen() {
                   </Pressable>
                 );
               }
-              // group item
               const g = item.group;
               const isLoading = starting === g.id;
               const unread = groupUnread.get(g.id) ?? 0;
@@ -304,10 +306,10 @@ export default function HomeScreen() {
                   onPress={() => openGroup(g)}
                   disabled={isLoading}
                 >
-                  <GroupAvatar emoji={g.emoji ?? '🏘️'} color={g.color ?? '#4ECDC4'} size={60} />
+                  <GroupAvatar emoji={g.emoji ?? '🏘️'} color={g.color ?? '#4ECDC4'} size={AVATAR_SIZE} />
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{g.name}</Text>
-                    <Text style={styles.cardSub}>👥 {g.memberCount} member{g.memberCount !== 1 ? 's' : ''}</Text>
+                    <Text style={styles.cardName} numberOfLines={1}>{g.name}</Text>
+                    <Text style={styles.cardSub} numberOfLines={1}>👥 {g.memberCount} member{g.memberCount !== 1 ? 's' : ''}</Text>
                     {g.description ? <Text style={styles.cardDesc} numberOfLines={1}>{g.description}</Text> : null}
                   </View>
                   {isLoading ? (
@@ -350,8 +352,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#FF6B2B',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: ms(16),
+    paddingVertical: ms(12),
     borderBottomWidth: 2.5,
     borderBottomColor: '#1C1C2E',
     flexDirection: 'row',
@@ -359,20 +361,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: ms(22),
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: ms(8),
+    flexShrink: 0,
   },
   logoutBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: s(34),
+    height: s(34),
+    borderRadius: s(17),
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.5)',
@@ -383,17 +387,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
   logoutBtnText: {
-    fontSize: 16,
+    fontSize: ms(15),
     color: '#FFFFFF',
   },
   tabRow: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 12,
+    padding: ms(12),
+    gap: ms(10),
   },
   tab: {
     flex: 1,
-    paddingVertical: 13,
+    paddingVertical: ms(11),
     borderRadius: 999,
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
@@ -409,7 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B2B',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: ms(15),
     fontWeight: '800',
     color: '#1C1C2E',
   },
@@ -420,110 +424,114 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: ms(12),
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: ms(15),
     fontWeight: '700',
     color: '#1C1C2E',
   },
   list: {
-    padding: 16,
-    gap: 10,
-    paddingBottom: 32,
+    padding: ms(12),
+    gap: ms(8),
+    paddingBottom: ms(24),
   },
   sectionHeader: {
-    fontSize: 13,
+    fontSize: ms(12),
     fontWeight: '800',
     color: '#888',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginTop: 4,
-    marginBottom: 2,
-    paddingHorizontal: 4,
+    marginTop: ms(4),
+    marginBottom: ms(2),
+    paddingHorizontal: ms(4),
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: ms(16),
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
-    padding: 14,
-    gap: 14,
+    padding: ms(12),
+    gap: ms(12),
     shadowColor: '#1C1C2E',
-    shadowOffset: { width: 4, height: 4 },
+    shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
-    elevation: 6,
+    elevation: 5,
   },
   cardPressed: {
     shadowOffset: { width: 1, height: 1 },
-    transform: [{ translateX: 3 }, { translateY: 3 }],
+    transform: [{ translateX: 2 }, { translateY: 2 }],
   },
   cardInfo: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   cardName: {
-    fontSize: 19,
+    fontSize: ms(16),
     fontWeight: '800',
     color: '#1C1C2E',
   },
   cardSub: {
-    fontSize: 13,
+    fontSize: ms(12),
     fontWeight: '600',
     color: '#666',
-    marginTop: 3,
+    marginTop: ms(2),
   },
   cardDesc: {
-    fontSize: 12,
+    fontSize: ms(11),
     fontWeight: '500',
     color: '#999',
-    marginTop: 2,
+    marginTop: ms(2),
   },
   cardRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: ms(5),
+    flexShrink: 0,
   },
   badge: {
     backgroundColor: '#2ECC71',
     borderRadius: 999,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 5,
+    minWidth: ms(20),
+    height: ms(20),
+    paddingHorizontal: ms(4),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#1C1C2E',
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: ms(10),
     fontWeight: '900',
     color: '#FFFFFF',
   },
   chevron: {
-    fontSize: 30,
+    fontSize: ms(24),
     fontWeight: '900',
     color: '#1C1C2E',
+    lineHeight: ms(28),
   },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
-    gap: 8,
+    paddingTop: vs(60),
+    gap: ms(8),
   },
   emptyEmoji: {
-    fontSize: 64,
+    fontSize: ms(52),
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: ms(18),
     fontWeight: '800',
     color: '#1C1C2E',
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: ms(13),
     fontWeight: '500',
     color: '#888',
   },
@@ -531,32 +539,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: ms(20),
   },
   comingSoonCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: ms(20),
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
-    padding: 40,
+    padding: ms(28),
     alignItems: 'center',
+    width: '100%',
     shadowColor: '#1C1C2E',
-    shadowOffset: { width: 6, height: 6 },
+    shadowOffset: { width: 5, height: 5 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 8,
-    gap: 12,
+    gap: ms(10),
   },
   comingSoonEmoji: {
-    fontSize: 72,
+    fontSize: ms(52),
   },
   comingSoonTitle: {
-    fontSize: 34,
+    fontSize: ms(28),
     fontWeight: '900',
     color: '#1C1C2E',
   },
   comingSoonSub: {
-    fontSize: 17,
+    fontSize: ms(15),
     fontWeight: '600',
     color: '#888',
   },

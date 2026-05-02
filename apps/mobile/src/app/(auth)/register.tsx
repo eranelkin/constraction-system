@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { useRouter } from 'expo-router';
 import { apiRequest } from '@/lib/api-client';
 import { saveSession } from '@/lib/auth/token-storage';
+import { ms } from '@/lib/responsive';
 import type { AuthResponseDTO } from '@constractor/types';
 
 export default function RegisterScreen() {
@@ -34,76 +35,78 @@ export default function RegisterScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Full name"
-        value={displayName}
-        onChangeText={setDisplayName}
-        autoCapitalize="words"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoComplete="new-password"
-      />
-      <Text style={styles.label}>I am a:</Text>
-      <View style={styles.roleRow}>
-        <Pressable
-          style={[styles.roleBtn, role === 'member' && styles.roleBtnActive]}
-          onPress={() => setRole('member')}
-        >
-          <Text style={[styles.roleBtnText, role === 'member' && styles.roleBtnTextActive]}>
-            Worker
-          </Text>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Create Account</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Full name"
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoCapitalize="words"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoComplete="new-password"
+        />
+        <Text style={styles.label}>I am a:</Text>
+        <View style={styles.roleRow}>
+          <Pressable
+            style={[styles.roleBtn, role === 'member' && styles.roleBtnActive]}
+            onPress={() => setRole('member')}
+          >
+            <Text style={[styles.roleBtnText, role === 'member' && styles.roleBtnTextActive]}>
+              Worker
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.roleBtn, role === 'manager' && styles.roleBtnActive]}
+            onPress={() => setRole('manager')}
+          >
+            <Text style={[styles.roleBtnText, role === 'manager' && styles.roleBtnTextActive]}>
+              Manager
+            </Text>
+          </Pressable>
+        </View>
+        <Pressable style={styles.button} onPress={() => void handleRegister()} disabled={loading}>
+          <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
         </Pressable>
-        <Pressable
-          style={[styles.roleBtn, role === 'manager' && styles.roleBtnActive]}
-          onPress={() => setRole('manager')}
-        >
-          <Text style={[styles.roleBtnText, role === 'manager' && styles.roleBtnTextActive]}>
-            Manager
+        <Text style={styles.link}>
+          Already have an account?{' '}
+          <Text style={styles.linkText} onPress={() => router.back()}>
+            Login
           </Text>
-        </Pressable>
-      </View>
-      <Pressable style={styles.button} onPress={handleRegister} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
-      </Pressable>
-      <Text style={styles.link}>
-        Already have an account?{' '}
-        <Text style={styles.linkText} onPress={() => router.back()}>
-          Login
         </Text>
-      </Text>
-    </ScrollView>
+      </ScrollView>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 24 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 16 },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#444' },
-  roleRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  roleBtn: { flex: 1, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
+  container: { flexGrow: 1, padding: ms(24), justifyContent: 'center' },
+  title: { fontSize: ms(26), fontWeight: '700', marginBottom: ms(20) },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: ms(8), padding: ms(13), marginBottom: ms(14), fontSize: ms(15) },
+  label: { fontSize: ms(14), fontWeight: '600', marginBottom: ms(8), color: '#444' },
+  roleRow: { flexDirection: 'row', gap: ms(12), marginBottom: ms(20) },
+  roleBtn: { flex: 1, padding: ms(13), borderRadius: ms(8), borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   roleBtnActive: { backgroundColor: '#0070f3', borderColor: '#0070f3' },
-  roleBtnText: { fontSize: 16, fontWeight: '600', color: '#333' },
+  roleBtnText: { fontSize: ms(15), fontWeight: '600', color: '#333' },
   roleBtnTextActive: { color: '#fff' },
-  button: { backgroundColor: '#0070f3', padding: 16, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', color: '#666' },
+  button: { backgroundColor: '#0070f3', padding: ms(14), borderRadius: ms(8), alignItems: 'center', marginBottom: ms(14) },
+  buttonText: { color: '#fff', fontSize: ms(15), fontWeight: '600' },
+  link: { textAlign: 'center', color: '#666', fontSize: ms(14) },
   linkText: { color: '#0070f3', fontWeight: '600' },
 });

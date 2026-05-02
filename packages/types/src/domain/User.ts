@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   language: string;
   emailVerified: boolean;
+  isActive: boolean;
   createdAt: Date;
 }
 
@@ -18,6 +19,7 @@ export interface PublicUser {
   role: UserRole;
   language: string;
   emailVerified: boolean;
+  isActive: boolean;
   createdAt: Date;
   hasAvatar: boolean;
 }
@@ -39,6 +41,7 @@ export type UpdateUserDTO = {
   role?: UserRole;
   language?: string;
   emailVerified?: boolean;
+  isActive?: boolean;
   avatarData?: Buffer | null;
   avatarMimeType?: string | null;
 };

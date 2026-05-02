@@ -10,6 +10,7 @@ interface UserRow {
   role: string;
   language: string;
   email_verified: boolean;
+  is_active: boolean;
   created_at: Date;
   avatar_data: Buffer | null;
   avatar_mime_type: string | null;
@@ -24,6 +25,7 @@ function rowToUser(row: UserRow): User {
     role: row.role as User['role'],
     language: row.language,
     emailVerified: row.email_verified,
+    isActive: row.is_active,
     createdAt: row.created_at,
   };
 }
@@ -36,6 +38,7 @@ function rowToPublicUser(row: UserRow): PublicUser {
     role: row.role as User['role'],
     language: row.language,
     emailVerified: row.email_verified,
+    isActive: row.is_active,
     createdAt: row.created_at,
     hasAvatar: row.avatar_data !== null,
   };
@@ -70,7 +73,7 @@ export class UserRepository implements IUserRepository {
 
   async listAll(excludeId: string): Promise<ContactUser[]> {
     const { rows } = await this.db.query<{ id: string; display_name: string; role: string }>(
-      'SELECT id, display_name, role FROM users WHERE id != $1 ORDER BY display_name ASC',
+      'SELECT id, display_name, role FROM users WHERE id != $1 AND is_active = true ORDER BY display_name ASC',
       [excludeId],
     );
     return rows.map((r) => ({
@@ -118,6 +121,7 @@ export class UserRepository implements IUserRepository {
     if (data.passwordHash !== undefined) { fields.push(`password_hash = $${idx++}`); values.push(data.passwordHash); }
     if (data.emailVerified !== undefined){ fields.push(`email_verified = $${idx++}`); values.push(data.emailVerified); }
     if (data.language !== undefined)     { fields.push(`language = $${idx++}`);       values.push(data.language); }
+    if (data.isActive !== undefined)     { fields.push(`is_active = $${idx++}`);      values.push(data.isActive); }
 
     // avatarData: null → clear, Buffer → set, undefined → no change
     if (data.avatarData !== undefined) {

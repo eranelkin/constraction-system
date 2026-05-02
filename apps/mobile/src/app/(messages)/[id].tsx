@@ -14,10 +14,15 @@ import {
   Modal,
   ActivityIndicator,
   Image,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { ms, s, vs } from '../../lib/responsive';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 const SENDER_COLORS = ['#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF', '#FFD93D', '#FF6B2B'];
+const AVATAR_SIZE_HEADER = s(38);
+const AVATAR_SIZE_BUBBLE = s(30);
 
 function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   userId: string; fallbackEmoji: string; fallbackColor: string; size: number;
@@ -325,7 +330,7 @@ export default function ThreadScreen() {
         <Text style={styles.bubbleAvatarInitial}>{senderInitial}</Text>
       </View>
     ) : participantId ? (
-      <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={32} />
+      <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={AVATAR_SIZE_BUBBLE} />
     ) : (
       <View style={[styles.bubbleAvatar, { backgroundColor: color }]}>
         <Text style={styles.bubbleAvatarEmoji}>{emoji}</Text>
@@ -362,7 +367,7 @@ export default function ThreadScreen() {
           <Text style={styles.backBtnText}>‹</Text>
         </Pressable>
         {participantId ? (
-          <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={42} />
+          <UserAvatar userId={participantId} fallbackEmoji={emoji} fallbackColor={color} size={AVATAR_SIZE_HEADER} />
         ) : (
           <View style={[styles.headerAvatar, { backgroundColor: color }]}>
             <Text style={styles.headerAvatarEmoji}>{emoji}</Text>
@@ -426,7 +431,8 @@ export default function ThreadScreen() {
 
       {/* ── Voice Modal ─────────────────────────────────────────────────── */}
       <Modal visible={voicePhase !== null} transparent animationType="fade" onRequestClose={() => void cancelVoice()}>
-        <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
 
           {/* RECORDING phase */}
           {voicePhase === 'recording' && (
@@ -454,50 +460,64 @@ export default function ThreadScreen() {
 
           {/* EDITING phase */}
           {voicePhase === 'editing' && (
-            <View style={styles.editingContainer}>
-              {/* Cancel button */}
-              <Pressable
-                style={({ pressed }) => [styles.circleBtn, styles.cancelBtn, pressed && styles.btnPressed]}
-                onPress={() => void cancelVoice()}
-              >
-                <Text style={styles.circleBtnText}>✕</Text>
-              </Pressable>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.editingKAV}
+            >
+              <View style={styles.editingContainer}>
+                {/* Cancel button */}
+                <Pressable
+                  style={({ pressed }) => [styles.circleBtn, styles.cancelBtn, pressed && styles.btnPressed]}
+                  onPress={() => void cancelVoice()}
+                >
+                  <Text style={styles.circleBtnText}>✕</Text>
+                </Pressable>
 
-              {/* Editable transcription */}
-              <View style={styles.transcriptCard}>
-                <Text style={styles.transcriptLabel}>✏️ Edit your message</Text>
-                <TextInput
-                  style={styles.transcriptInput}
-                  value={voiceText}
-                  onChangeText={setVoiceText}
-                  multiline
-                  autoFocus
-                  placeholder="Transcribed text will appear here…"
-                  placeholderTextColor="#AAA"
-                />
+                {/* Editable transcription */}
+                <Pressable style={styles.transcriptCard} onPress={Keyboard.dismiss}>
+                  <Text style={styles.transcriptLabel}>✏️ Edit your message</Text>
+                  <TextInput
+                    style={styles.transcriptInput}
+                    value={voiceText}
+                    onChangeText={setVoiceText}
+                    multiline
+                    autoFocus
+                    placeholder="Transcribed text will appear here…"
+                    placeholderTextColor="#AAA"
+                    returnKeyType="done"
+                    blurOnSubmit
+                  />
+                  <Text style={styles.keyboardHint}>Tap outside to close keyboard</Text>
+                </Pressable>
+
+                {/* Send button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.circleBtn,
+                    styles.voiceSendBtn,
+                    !voiceText.trim() && styles.circleBtnDisabled,
+                    pressed && voiceText.trim() ? styles.btnPressed : null,
+                  ]}
+                  onPress={() => void sendVoiceText()}
+                  disabled={!voiceText.trim()}
+                >
+                  <Text style={styles.circleBtnText}>➤</Text>
+                </Pressable>
               </View>
-
-              {/* Send button */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.circleBtn,
-                  styles.voiceSendBtn,
-                  !voiceText.trim() && styles.circleBtnDisabled,
-                  pressed && voiceText.trim() ? styles.btnPressed : null,
-                ]}
-                onPress={() => void sendVoiceText()}
-                disabled={!voiceText.trim()}
-              >
-                <Text style={styles.circleBtnText}>➤</Text>
-              </Pressable>
-            </View>
+            </KeyboardAvoidingView>
           )}
 
-        </View>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );
 }
+
+const BTN = s(44);
+const BUBBLE_AVATAR = s(30);
+const HEADER_AVATAR = s(38);
+const BACK_BTN = s(36);
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFF9E6' },
@@ -508,94 +528,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FF6B2B',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(10),
     borderBottomWidth: 2.5,
     borderBottomColor: '#1C1C2E',
-    gap: 12,
+    gap: ms(10),
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: BACK_BTN,
+    height: BACK_BTN,
+    borderRadius: BACK_BTN / 2,
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  backBtnText: { fontSize: 26, color: '#FFFFFF', fontWeight: '900', lineHeight: 30 },
+  backBtnText: { fontSize: ms(24), color: '#FFFFFF', fontWeight: '900', lineHeight: ms(28) },
   headerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: HEADER_AVATAR,
+    height: HEADER_AVATAR,
+    borderRadius: HEADER_AVATAR / 2,
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  headerAvatarEmoji: { fontSize: 22 },
-  headerName: { flex: 1, fontSize: 20, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.3 },
+  headerAvatarEmoji: { fontSize: ms(20) },
+  headerName: { flex: 1, fontSize: ms(18), fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.3 },
 
   // Messages
-  messageList: { padding: 14, gap: 10, paddingBottom: 8 },
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  messageList: { padding: ms(12), gap: ms(8), paddingBottom: ms(8) },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: ms(6) },
   bubbleRowMe: { justifyContent: 'flex-end' },
   bubbleRowThem: { justifyContent: 'flex-start' },
   bubbleAvatar: {
-    width: 32, height: 32, borderRadius: 16,
+    width: BUBBLE_AVATAR, height: BUBBLE_AVATAR, borderRadius: BUBBLE_AVATAR / 2,
     borderWidth: 2, borderColor: '#1C1C2E',
     alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  bubbleAvatarEmoji: { fontSize: 16 },
-  bubbleAvatarInitial: { fontSize: 14, fontWeight: '900', color: '#1C1C2E' },
+  bubbleAvatarEmoji: { fontSize: ms(14) },
+  bubbleAvatarInitial: { fontSize: ms(13), fontWeight: '900', color: '#1C1C2E' },
   bubbleWrapper: {
     flex: 1,
     maxWidth: '72%',
-    gap: 4,
+    gap: ms(3),
   },
   bubble: {
-    paddingVertical: 10, paddingHorizontal: 14,
-    borderRadius: 18, borderWidth: 2, borderColor: '#1C1C2E',
+    paddingVertical: ms(9), paddingHorizontal: ms(13),
+    borderRadius: ms(16), borderWidth: 2, borderColor: '#1C1C2E',
     shadowColor: '#1C1C2E', shadowOffset: { width: 2, height: 2 },
     shadowOpacity: 1, shadowRadius: 0, elevation: 3,
   },
   bubbleMe: { backgroundColor: '#FF6B2B', borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4 },
-  bubbleMeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
-  bubbleThemText: { color: '#1C1C2E', fontSize: 16, fontWeight: '500' },
+  bubbleMeText: { color: '#FFFFFF', fontSize: ms(15), fontWeight: '500' },
+  bubbleThemText: { color: '#1C1C2E', fontSize: ms(15), fontWeight: '500' },
   senderName: {
-    fontSize: 11, fontWeight: '700', color: '#FF6B2B',
-    marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: ms(10), fontWeight: '700', color: '#FF6B2B',
+    marginBottom: ms(3), textTransform: 'uppercase', letterSpacing: 0.5,
   },
   messageGroup: {
-    marginVertical: 2,
+    marginVertical: ms(2),
   },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  emptyEmoji: { fontSize: 56 },
-  emptyText: { fontSize: 17, fontWeight: '700', color: '#888' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: vs(60), gap: ms(10) },
+  emptyEmoji: { fontSize: ms(48) },
+  emptyText: { fontSize: ms(15), fontWeight: '700', color: '#888' },
 
   // Input bar
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 12, gap: 10,
+    padding: ms(10), gap: ms(8),
     borderTopWidth: 2.5, borderTopColor: '#1C1C2E',
     backgroundColor: '#FFFFFF',
   },
   input: {
     flex: 1,
-    paddingHorizontal: 16, paddingVertical: 12,
+    paddingHorizontal: ms(14), paddingVertical: ms(10),
     borderWidth: 2.5, borderColor: '#1C1C2E', borderRadius: 999,
-    maxHeight: 100, fontSize: 16,
+    maxHeight: vs(90), fontSize: ms(15),
     backgroundColor: '#FFF9E6', color: '#1C1C2E', fontWeight: '500',
   },
   actionBtn: {
-    width: 48, height: 48, borderRadius: 24,
+    width: BTN, height: BTN, borderRadius: BTN / 2,
     borderWidth: 2.5, borderColor: '#1C1C2E',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#1C1C2E', shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1, shadowRadius: 0, elevation: 4,
+    flexShrink: 0,
   },
   sendBtn: { backgroundColor: '#FF6B2B' },
   voiceBtn: { backgroundColor: '#FFD93D' },
@@ -603,7 +627,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 1, height: 1 },
     transform: [{ translateX: 2 }, { translateY: 2 }],
   },
-  actionBtnText: { fontSize: 20, fontWeight: '900' },
+  actionBtnText: { fontSize: ms(18), fontWeight: '900' },
 
   // Modal overlay
   modalOverlay: {
@@ -611,44 +635,44 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(28, 28, 46, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: ms(20),
   },
 
   // Recording / Transcribing shared card
   modalContent: {
     backgroundColor: '#FFF9E6',
-    borderRadius: 28,
+    borderRadius: ms(24),
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
-    padding: 40,
+    padding: ms(28),
     alignItems: 'center',
-    gap: 20,
+    gap: ms(16),
     width: '100%',
     shadowColor: '#1C1C2E',
-    shadowOffset: { width: 6, height: 6 },
+    shadowOffset: { width: 5, height: 5 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 10,
   },
 
-  // Pulse animation (static for now — use Animated for true pulsing)
+  // Pulse animation
   pulseRing: {
-    width: 100, height: 100, borderRadius: 50,
+    width: s(88), height: s(88), borderRadius: s(44),
     backgroundColor: 'rgba(255, 107, 43, 0.2)',
     borderWidth: 3, borderColor: '#FF6B2B',
     alignItems: 'center', justifyContent: 'center',
   },
   pulseCore: {
-    width: 76, height: 76, borderRadius: 38,
+    width: s(66), height: s(66), borderRadius: s(33),
     backgroundColor: '#FF6B2B',
     borderWidth: 2.5, borderColor: '#1C1C2E',
     alignItems: 'center', justifyContent: 'center',
   },
-  modalMicEmoji: { fontSize: 36 },
-  recordingTimer: { fontSize: 36, fontWeight: '900', color: '#1C1C2E', letterSpacing: 2 },
-  recordingHint: { fontSize: 15, fontWeight: '600', color: '#888' },
+  modalMicEmoji: { fontSize: ms(32) },
+  recordingTimer: { fontSize: ms(32), fontWeight: '900', color: '#1C1C2E', letterSpacing: 2 },
+  recordingHint: { fontSize: ms(14), fontWeight: '600', color: '#888' },
   stopRecordBtn: {
-    width: 60, height: 60, borderRadius: 30,
+    width: s(54), height: s(54), borderRadius: s(27),
     backgroundColor: '#FFFFFF',
     borderWidth: 2.5, borderColor: '#1C1C2E',
     alignItems: 'center', justifyContent: 'center',
@@ -656,20 +680,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 1, shadowRadius: 0, elevation: 5,
   },
   stopDot: {
-    width: 22, height: 22, borderRadius: 4,
+    width: ms(20), height: ms(20), borderRadius: ms(4),
     backgroundColor: '#E53935',
   },
 
-  transcribingText: { fontSize: 18, fontWeight: '700', color: '#1C1C2E' },
+  transcribingText: { fontSize: ms(16), fontWeight: '700', color: '#1C1C2E' },
 
   // Editing layout
+  editingKAV: {
+    width: '100%',
+  },
   editingContainer: {
     width: '100%',
     alignItems: 'center',
-    gap: 24,
+    gap: ms(20),
   },
   circleBtn: {
-    width: 70, height: 70, borderRadius: 35,
+    width: s(60), height: s(60), borderRadius: s(30),
     borderWidth: 3, borderColor: '#1C1C2E',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#1C1C2E', shadowOffset: { width: 4, height: 4 },
@@ -678,28 +705,29 @@ const styles = StyleSheet.create({
   cancelBtn: { backgroundColor: '#E53935' },
   voiceSendBtn: { backgroundColor: '#2ECC71' },
   circleBtnDisabled: { backgroundColor: '#CCC', borderColor: '#AAA', shadowOffset: { width: 0, height: 0 }, elevation: 0 },
-  circleBtnText: { fontSize: 26, fontWeight: '900', color: '#FFFFFF' },
+  circleBtnText: { fontSize: ms(22), fontWeight: '900', color: '#FFFFFF' },
   transcriptCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: ms(16),
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
-    padding: 20,
+    padding: ms(16),
     shadowColor: '#1C1C2E',
-    shadowOffset: { width: 5, height: 5 },
+    shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 8,
-    gap: 10,
+    gap: ms(8),
   },
-  transcriptLabel: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 },
+  transcriptLabel: { fontSize: ms(12), fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: ms(4) },
+  keyboardHint: { fontSize: ms(11), color: '#BBB', textAlign: 'center', marginTop: ms(6) },
   transcriptInput: {
-    fontSize: 18,
+    fontSize: ms(16),
     fontWeight: '500',
     color: '#1C1C2E',
-    minHeight: 120,
+    minHeight: vs(100),
     textAlignVertical: 'top',
-    lineHeight: 26,
+    lineHeight: ms(24),
   },
 });

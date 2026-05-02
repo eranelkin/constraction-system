@@ -81,6 +81,7 @@ export default function UsersPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PublicUser | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [togglingActive, setTogglingActive] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   // cache-bust counter per user id
   const [avatarBust, setAvatarBust] = useState<Record<string, number>>({});
@@ -202,6 +203,18 @@ export default function UsersPage() {
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setFormLoading(false);
+    }
+  }
+
+  async function handleToggleActive(user: PublicUser) {
+    setTogglingActive(user.id);
+    try {
+      await apiRequest(`/users/${user.id}/active`, { method: 'PATCH', body: { isActive: !user.isActive }, token: token() });
+      await loadUsers();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Failed to update user status');
+    } finally {
+      setTogglingActive(null);
     }
   }
 
@@ -386,7 +399,7 @@ export default function UsersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--navy)', color: '#fff' }}>
-                {['', 'Name', 'Email', 'Language', 'Role', 'Joined', 'Actions'].map((h) => (
+                {['', 'Name', 'Email', 'Language', 'Role', 'Status', 'Joined', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                 ))}
               </tr>
@@ -397,8 +410,10 @@ export default function UsersPage() {
                 const isSelf = user.id === currentUser?.id;
                 const bust = avatarBust[user.id] ?? 0;
                 const langLabel = LANGUAGES.find((l) => l.code === user.language)?.label ?? user.language;
+                const isToggling = togglingActive === user.id;
+                const canToggle = !isSelf && (isAdmin || user.role !== 'admin');
                 return (
-                  <tr key={user.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #eee' }}>
+                  <tr key={user.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #eee', opacity: user.isActive ? 1 : 0.6 }}>
                     {/* Avatar cell */}
                     <td style={{ padding: '0.5rem 0.75rem', width: 48 }}>
                       {user.hasAvatar ? (
@@ -421,6 +436,21 @@ export default function UsersPage() {
                         {user.role}
                       </span>
                     </td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={{
+                        background: user.isActive ? '#d4edda' : '#f8d7da',
+                        color: user.isActive ? '#155724' : '#721c24',
+                        border: `1.5px solid ${user.isActive ? '#c3e6cb' : '#f5c6cb'}`,
+                        borderRadius: 'var(--radius-pill)',
+                        padding: '0.2rem 0.7rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                      }}>
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
                     <td style={{ padding: '0.75rem 1rem', color: '#888', fontSize: '0.85rem' }}>
                       {new Date(user.createdAt).toLocaleDateString()}
                     </td>
@@ -429,6 +459,13 @@ export default function UsersPage() {
                         <button onClick={() => openEdit(user)}
                           style={{ background: 'transparent', border: '2px solid var(--navy)', borderRadius: '6px', padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>
                           ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => void handleToggleActive(user)}
+                          disabled={!canToggle || isToggling}
+                          title={isSelf ? 'Cannot change your own status' : !canToggle ? 'Cannot change admin status' : user.isActive ? 'Deactivate user' : 'Activate user'}
+                          style={{ background: 'transparent', border: '2px solid', borderColor: !canToggle ? '#ddd' : user.isActive ? 'var(--orange)' : '#38a169', borderRadius: '6px', padding: '0.3rem 0.7rem', cursor: canToggle && !isToggling ? 'pointer' : 'not-allowed', fontSize: '0.8rem', fontWeight: 700, color: !canToggle ? '#aaa' : user.isActive ? 'var(--orange)' : '#38a169', opacity: !canToggle ? 0.5 : 1 }}>
+                          {isToggling ? '…' : user.isActive ? '⏸ Deactivate' : '▶ Activate'}
                         </button>
                         <button onClick={() => setDeleteTarget(user)} disabled={isSelf}
                           title={isSelf ? 'Cannot delete your own account' : 'Delete user'}

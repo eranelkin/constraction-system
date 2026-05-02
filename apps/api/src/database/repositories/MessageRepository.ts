@@ -59,10 +59,14 @@ export class MessageRepository implements IMessageRepository {
     }
 
     const { rows } = await this.db.query<MessageRow>(
-      `${BASE_SELECT}
-       WHERE m.conversation_id = $1
-       ORDER BY m.created_at ASC
-       LIMIT 50`,
+      `SELECT sub.id, sub.conversation_id, sub.sender_id, sub.sender_name, sub.body, sub.created_at
+       FROM (
+         ${BASE_SELECT}
+         WHERE m.conversation_id = $1
+         ORDER BY m.created_at DESC
+         LIMIT 100
+       ) sub
+       ORDER BY sub.created_at ASC`,
       [conversationId],
     );
     return rows.map(rowToMessage);
