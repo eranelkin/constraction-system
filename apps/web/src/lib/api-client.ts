@@ -1,3 +1,6 @@
+import { getRefreshToken, updateTokens, clearSession } from './auth/session.js';
+import type { AuthTokens } from '@constractor/types';
+
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -19,10 +22,32 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function apiRequest<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+async function attemptRefresh(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      clearSession();
+      return null;
+    }
+
+    const data = (await response.json()) as { tokens: AuthTokens };
+    updateTokens(data.tokens);
+    return data.tokens.accessToken;
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+async function executeRequest<T>(path: string, options: RequestOptions): Promise<T> {
   const { body, token, ...init } = options;
 
   const headers: Record<string, string> = {
@@ -45,4 +70,21 @@ export async function apiRequest<T>(
 
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  try {
+    return await executeRequest<T>(path, options);
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 401) {
+      const newToken = await attemptRefresh();
+      if (newToken) {
+        return executeRequest<T>(path, { ...options, token: newToken });
+      }
+    }
+    throw err;
+  }
 }

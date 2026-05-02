@@ -1,0 +1,76 @@
+# Working Across Multiple Desktops
+
+## Every time you pull new code
+
+```bash
+# 1. Start infrastructure (if not running)
+docker compose up -d
+
+# 2. Install any new dependencies
+pnpm install
+
+# 3. Build shared packages (if types or config changed)
+pnpm --filter @constractor/types build
+pnpm --filter @constractor/config build
+
+# 4. Run migrations — always do this after pulling
+pnpm --filter @constractor/api run db:migrate
+```
+
+Step 4 is the most commonly missed. If you see a **500 error** related to a feature that was built on another machine, a missing migration is the first thing to check.
+
+## First-time setup on a new machine
+
+```bash
+docker compose up -d
+cp .env.example apps/api/.env
+pnpm install
+pnpm --filter @constractor/types build && pnpm --filter @constractor/config build
+pnpm --filter @constractor/api run db:migrate
+```
+
+## Restoring from a dump file
+
+Use this when you want to sync your local database to a snapshot from another machine.
+
+```bash
+# Stop and remove the postgres container
+docker compose stop postgres && docker compose rm -f postgres
+
+# Remove the data volume
+docker volume rm constractor-system_postgres_data
+
+# Start a fresh postgres container and wait for it to be ready
+docker compose up -d postgres
+until docker exec constractor_postgres pg_isready -U constractor -d constractor_dev; do sleep 1; done
+
+# Restore the dump
+docker exec -i constractor_postgres psql -U constractor -d constractor_dev < constractor_dump.sql
+
+# Run any migrations that postdate the dump
+pnpm --filter @constractor/api run db:migrate
+```
+
+> **Note:** Always run migrations after restoring a dump. The dump may have been taken before the latest migrations were applied.
+
+## Creating a dump from your current database
+
+```bash
+docker exec constractor_postgres pg_dump -U constractor constractor_dev > constractor_dump.sql
+```
+
+## Checklist when switching machines
+
+- [ ] `git pull` — get latest code
+- [ ] `pnpm install` — sync dependencies
+- [ ] `docker compose up -d` — infrastructure running
+- [ ] `pnpm --filter @constractor/api run db:migrate` — apply missing migrations
+- [ ] `apps/api/.env` exists and is up to date
+
+## Migration files location
+
+```
+apps/api/src/database/migrations/
+```
+
+Each file is numbered sequentially (e.g. `006_groups.sql`). The migration runner tracks which have been applied and only runs new ones — it is safe to run `db:migrate` multiple times.

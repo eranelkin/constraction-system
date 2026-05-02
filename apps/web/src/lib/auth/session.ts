@@ -32,6 +32,12 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
+export function updateTokens(tokens: AuthTokens): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(ACCESS_KEY, tokens.accessToken);
+  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+}
+
 export function clearSession(): void {
   if (typeof window === 'undefined') return;
   sessionStorage.removeItem(ACCESS_KEY);
