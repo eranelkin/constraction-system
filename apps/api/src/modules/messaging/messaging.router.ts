@@ -6,7 +6,7 @@ import { startConversationSchema, sendMessageSchema, messagesAfterSchema } from 
 
 export function createMessagingRouter(container: AppContainer): Router {
   const router = Router();
-  const { authProvider, conversationRepository, messageRepository } = container;
+  const { authProvider, conversationRepository, messageRepository, realtimeProvider } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
   router.use(authenticate);
@@ -66,6 +66,18 @@ export function createMessagingRouter(container: AppContainer): Router {
       const { body } = sendMessageSchema.parse(req.body);
       const message = await messageRepository.create(id, req.user!.id, body);
       res.status(201).json({ message });
+
+      const conversation = await conversationRepository.findById(id);
+      if (conversation) {
+        const lastMessage = { body: message.body, createdAt: message.createdAt };
+        void realtimeProvider.emit(`conversation:${id}`, 'new_message', { message });
+        for (const p of conversation.participants) {
+          void realtimeProvider.emit(`user:${p.userId}`, 'conversation_updated', {
+            conversationId: id,
+            lastMessage,
+          });
+        }
+      }
     } catch (err) {
       next(err);
     }

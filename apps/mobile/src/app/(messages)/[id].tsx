@@ -45,7 +45,8 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Audio } from 'expo-av';
 import { apiRequest } from '../../lib/api-client';
 import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
-import type { ListMessagesResponse, SendMessageResponse, Message } from '@constractor/types';
+import { connectSocket, getSocket } from '../../lib/socket';
+import type { ListMessagesResponse, Message } from '@constractor/types';
 import * as FileSystem from 'expo-file-system';
 
 type VoicePhase = 'recording' | 'transcribing' | 'editing';
@@ -106,7 +107,7 @@ export default function ThreadScreen() {
     })();
   }, [id, fetchToken]);
 
-  // Message polling
+  // Load messages + subscribe to realtime updates
   useEffect(() => {
     if (!id) return;
 
@@ -119,6 +120,16 @@ export default function ThreadScreen() {
         );
         setMessages(data.messages);
         lastIdRef.current = data.messages.at(-1)?.id;
+
+        const sock = connectSocket(token ?? '');
+        sock.emit('join_conversation', id);
+        sock.on('new_message', (payload: { message: Message }) => {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === payload.message.id)) return prev;
+            lastIdRef.current = payload.message.id;
+            return [...prev, payload.message];
+          });
+        });
       } catch (err) {
         Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load messages');
       }
@@ -126,29 +137,10 @@ export default function ThreadScreen() {
 
     void load();
 
-    const interval = setInterval(async () => {
-      const after = lastIdRef.current;
-      const url = after
-        ? `/messaging/conversations/${id}/messages?after=${after}`
-        : `/messaging/conversations/${id}/messages`;
-      try {
-        const token = await fetchToken();
-        const data = await apiRequest<ListMessagesResponse>(url, { token });
-        if (data.messages.length > 0) {
-          setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const newMsgs = data.messages.filter((m) => !existingIds.has(m.id));
-            if (newMsgs.length === 0) return prev;
-            lastIdRef.current = newMsgs.at(-1)?.id ?? lastIdRef.current;
-            return [...prev, ...newMsgs];
-          });
-        }
-      } catch {
-        // ignore poll errors
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
+    return () => {
+      getSocket()?.off('new_message');
+      getSocket()?.emit('leave_conversation', id);
+    };
   }, [id, fetchToken]);
 
   async function handleSend() {
@@ -157,12 +149,11 @@ export default function ThreadScreen() {
     setInput('');
     try {
       const token = await fetchToken();
-      const data = await apiRequest<SendMessageResponse>(
+      await apiRequest<unknown>(
         `/messaging/conversations/${id}/messages`,
         { method: 'POST', body: { body }, token },
       );
-      setMessages((prev) => [...prev, data.message]);
-      lastIdRef.current = data.message.id;
+      // Message will arrive via the new_message socket event
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
     }
@@ -262,12 +253,11 @@ export default function ThreadScreen() {
     setVoiceText('');
     try {
       const token = await fetchToken();
-      const data = await apiRequest<SendMessageResponse>(
+      await apiRequest<unknown>(
         `/messaging/conversations/${id}/messages`,
         { method: 'POST', body: { body }, token },
       );
-      setMessages((prev) => [...prev, data.message]);
-      lastIdRef.current = data.message.id;
+      // Message will arrive via the new_message socket event
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
     }

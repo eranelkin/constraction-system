@@ -1,4 +1,4 @@
-import { getRefreshToken, updateTokens, clearSession } from './auth/session.js';
+import { getRefreshToken, updateTokens, clearSession } from './auth/session';
 import type { AuthTokens } from '@constractor/types';
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';

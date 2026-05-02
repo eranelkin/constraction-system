@@ -11,6 +11,8 @@ import { MockAIProvider } from './providers/ai/MockAIProvider.js';
 import { LocalStorageProvider } from './providers/storage/LocalStorageProvider.js';
 import { InMemoryQueueProvider } from './providers/queue/InMemoryQueueProvider.js';
 import { InMemoryRealtimeProvider } from './providers/realtime/InMemoryRealtimeProvider.js';
+import { SocketIOProvider } from './providers/realtime/SocketIOProvider.js';
+import type { Server } from 'socket.io';
 import { GroupRepository } from './database/repositories/GroupRepository.js';
 import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
 import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
@@ -41,7 +43,7 @@ export interface AppContainer {
   groupRepository: IGroupRepository;
 }
 
-export async function buildContainer(): Promise<AppContainer> {
+export async function buildContainer(io?: Server): Promise<AppContainer> {
   const db = new PostgreSQLAdapter(config.DATABASE_URL);
   const userRepository = new UserRepository(db);
   const conversationRepository = new ConversationRepository(db);
@@ -63,8 +65,8 @@ export async function buildContainer(): Promise<AppContainer> {
     ? (() => { throw new Error('BullMQProvider not yet implemented'); })()
     : new InMemoryQueueProvider();
 
-  const realtimeProvider: IRealtimeProvider = config.USE_REAL_REALTIME
-    ? (() => { throw new Error('SocketIOProvider not yet implemented'); })()
+  const realtimeProvider: IRealtimeProvider = config.USE_REAL_REALTIME && io
+    ? new SocketIOProvider(io)
     : new InMemoryRealtimeProvider();
 
   const speechProvider: ISpeechProvider = config.USE_REAL_SPEECH

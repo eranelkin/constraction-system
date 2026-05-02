@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { apiRequest } from '../../lib/api-client';
 import { getAccessToken } from '../../lib/auth/token-storage';
+import { connectSocket, getSocket } from '../../lib/socket';
 import type { ListConversationsResponse, ConversationSummary, StartConversationResponse } from '@constractor/types';
 
 export default function ConversationListScreen() {
@@ -35,6 +36,30 @@ export default function ConversationListScreen() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void (async () => {
+      const token = await getAccessToken();
+      if (!token || !mounted) return;
+      const sock = connectSocket(token);
+      sock.on('conversation_updated', (payload: { conversationId: string; lastMessage: { body: string; createdAt: string } }) => {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === payload.conversationId
+              ? { ...c, lastMessage: { body: payload.lastMessage.body, createdAt: new Date(payload.lastMessage.createdAt) }, updatedAt: new Date() }
+              : c,
+          ),
+        );
+      });
+    })();
+
+    return () => {
+      mounted = false;
+      getSocket()?.off('conversation_updated');
+    };
+  }, []);
 
   async function handleRefresh() {
     setRefreshing(true);
