@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -56,6 +56,36 @@ import * as FileSystem from 'expo-file-system';
 
 type VoicePhase = 'recording' | 'transcribing' | 'editing';
 
+type FlatItem =
+  | { type: 'message'; data: Message }
+  | { type: 'separator'; label: string; key: string };
+
+function formatTime(date: Date | string): string {
+  const d = new Date(date as string);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function formatDateLabel(date: Date | string): string {
+  const d = new Date(date as string);
+  const today = new Date();
+  if (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  ) return 'Today';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function isSameDay(a: Date | string, b: Date | string): boolean {
+  const da = new Date(a as string);
+  const db = new Date(b as string);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
 export default function ThreadScreen() {
   const { id, userName, userId: participantId, avatarEmoji, avatarColor, isGroup } = useLocalSearchParams<{
     id: string;
@@ -87,10 +117,11 @@ export default function ThreadScreen() {
 
   const lastIdRef = useRef<string | undefined>(undefined);
   const oldestIdRef = useRef<string | undefined>(undefined);
-  const flatListRef = useRef<FlatList<Message>>(null);
+  const flatListRef = useRef<FlatList<FlatItem>>(null);
   const translatingSet = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
   const userLanguageRef = useRef<string>('en');
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const fetchToken = useCallback(async () => {
     return (await getAccessToken()) ?? undefined;
@@ -127,6 +158,24 @@ export default function ThreadScreen() {
       userIdRef.current = uid;
       userLanguageRef.current = lang;
     })();
+  }, []);
+
+  // Preload notification sound once on mount
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../../assets/sounds/message.wav') as number,
+          { shouldPlay: false, volume: 1.0 },
+        );
+        soundRef.current = sound;
+      } catch { /* silently skip if asset missing */ }
+    })();
+    return () => {
+      void soundRef.current?.unloadAsync();
+      soundRef.current = null;
+    };
   }, []);
 
   // Mark conversation as read when opened
@@ -175,6 +224,7 @@ export default function ThreadScreen() {
           );
 
           const isOwn = incoming.senderId === userIdRef.current;
+          if (!isOwn) playMessageSound();
           if (isOwn || incoming.translatedBody) {
             // Own message or already translated (server cache hit) → show immediately
             setMessages((prev) => {
@@ -357,6 +407,11 @@ export default function ThreadScreen() {
     }
   }
 
+  function playMessageSound() {
+    if (voicePhase !== null) return;
+    void soundRef.current?.replayAsync().catch(() => {});
+  }
+
   function formatDuration(secs: number) {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
     const s = (secs % 60).toString().padStart(2, '0');
@@ -397,15 +452,45 @@ export default function ThreadScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, userId, userLanguage]);
 
+  // ── Flat list data: interleave date separators between day groups ────────
+
+  const flatData = useMemo((): FlatItem[] => {
+    const reversed = [...messages].reverse();
+    const result: FlatItem[] = [];
+    for (let i = 0; i < reversed.length; i++) {
+      const msg = reversed[i];
+      if (!msg) continue;
+      result.push({ type: 'message', data: msg });
+      const nextMsg = reversed[i + 1];
+      if (!nextMsg || !isSameDay(msg.createdAt, nextMsg.createdAt)) {
+        const d = new Date(msg.createdAt as unknown as string);
+        const key = `sep-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        result.push({ type: 'separator', label: formatDateLabel(msg.createdAt), key });
+      }
+    }
+    return result;
+  }, [messages]);
+
   // ── Render helpers ───────────────────────────────────────────────────────
 
-  function renderItem({ item }: { item: Message }) {
-    const isMe = item.senderId === userId;
-    const translated = item.translatedBody;
+  function renderItem({ item }: { item: FlatItem }) {
+    if (item.type === 'separator') {
+      return (
+        <View style={styles.dateSeparatorRow}>
+          <View style={styles.dateSeparatorPill}>
+            <Text style={styles.dateSeparatorText}>{item.label}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    const { data: msg } = item;
+    const isMe = msg.senderId === userId;
+    const translated = msg.translatedBody;
     const isTranslating = false;
 
-    const senderInitial = (item.senderName ?? '?').charAt(0).toUpperCase();
-    const senderColor = SENDER_COLORS[item.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
+    const senderInitial = (msg.senderName ?? '?').charAt(0).toUpperCase();
+    const senderColor = SENDER_COLORS[msg.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
 
     const avatarNode = isGroupChat ? (
       <View style={[styles.bubbleAvatar, { backgroundColor: senderColor }]}>
@@ -425,13 +510,16 @@ export default function ThreadScreen() {
           {!isMe && avatarNode}
           <View style={styles.bubbleWrapper}>
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-              {!isMe && <Text style={styles.senderName}>{item.senderName}</Text>}
+              {!isMe && <Text style={styles.senderName}>{msg.senderName}</Text>}
               {!isMe && isTranslating && !translated
                 ? <ActivityIndicator size={12} color="#888" style={{ alignSelf: 'flex-start' }} />
                 : <Text style={isMe ? styles.bubbleMeText : styles.bubbleThemText}>
-                    {(!isMe && translated) ? translated : item.body}
+                    {(!isMe && translated) ? translated : msg.body}
                   </Text>
               }
+              <Text style={[styles.timeText, isMe ? styles.timeTextMe : styles.timeTextThem]}>
+                {formatTime(msg.createdAt)}
+              </Text>
             </View>
           </View>
         </View>
@@ -466,9 +554,9 @@ export default function ThreadScreen() {
       >
         <FlatList
           ref={flatListRef}
-          data={[...messages].reverse()}
+          data={flatData}
           inverted
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.type === 'message' ? item.data.id : item.key}
           renderItem={renderItem}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
@@ -682,6 +770,32 @@ const styles = StyleSheet.create({
   },
   messageGroup: {
     marginVertical: ms(2),
+  },
+  dateSeparatorRow: {
+    alignItems: 'center',
+    marginVertical: ms(10),
+  },
+  dateSeparatorPill: {
+    backgroundColor: 'rgba(28,28,46,0.55)',
+    borderRadius: ms(12),
+    paddingHorizontal: ms(14),
+    paddingVertical: ms(4),
+  },
+  dateSeparatorText: {
+    color: '#FFFFFF',
+    fontSize: ms(12),
+    fontWeight: '600',
+  },
+  timeText: {
+    fontSize: ms(11),
+    alignSelf: 'flex-end',
+    marginTop: ms(3),
+  },
+  timeTextMe: {
+    color: 'rgba(255,255,255,0.65)',
+  },
+  timeTextThem: {
+    color: '#AAA',
   },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: vs(60), gap: ms(10) },
   emptyEmoji: { fontSize: ms(48) },
