@@ -1,6 +1,7 @@
 import type { Message } from '@constractor/types';
 import type { IDatabase } from '../DatabaseProvider.js';
-import type { IMessageRepository } from './IMessageRepository.js';
+import type { IMessageRepository, ListOptions } from './IMessageRepository.js';
+import type { TranslationCacheRepository } from './TranslationCacheRepository.js';
 
 interface MessageRow {
   id: string;
@@ -29,7 +30,10 @@ const BASE_SELECT = `
 `;
 
 export class MessageRepository implements IMessageRepository {
-  constructor(private readonly db: IDatabase) {}
+  constructor(
+    private readonly db: IDatabase,
+    private readonly translationCache: TranslationCacheRepository,
+  ) {}
 
   async create(conversationId: string, senderId: string, body: string): Promise<Message> {
     const row = await this.db.queryOne<MessageRow>(
@@ -45,30 +49,59 @@ export class MessageRepository implements IMessageRepository {
     return rowToMessage(row);
   }
 
-  async list(conversationId: string, afterId?: string): Promise<Message[]> {
+  async list(conversationId: string, options: ListOptions = {}): Promise<Message[]> {
+    const { beforeId, afterId, limit = 50, language } = options;
+    let rows: MessageRow[];
+
     if (afterId) {
-      const { rows } = await this.db.query<MessageRow>(
+      ({ rows } = await this.db.query<MessageRow>(
         `${BASE_SELECT}
          WHERE m.conversation_id = $1
            AND m.created_at > (SELECT created_at FROM messages WHERE id = $2)
          ORDER BY m.created_at ASC
-         LIMIT 100`,
-        [conversationId, afterId],
-      );
-      return rows.map(rowToMessage);
+         LIMIT $3`,
+        [conversationId, afterId, limit],
+      ));
+    } else if (beforeId) {
+      ({ rows } = await this.db.query<MessageRow>(
+        `SELECT sub.id, sub.conversation_id, sub.sender_id, sub.sender_name, sub.body, sub.created_at
+         FROM (
+           ${BASE_SELECT}
+           WHERE m.conversation_id = $1
+             AND m.created_at < (SELECT created_at FROM messages WHERE id = $2)
+           ORDER BY m.created_at DESC
+           LIMIT $3
+         ) sub
+         ORDER BY sub.created_at ASC`,
+        [conversationId, beforeId, limit],
+      ));
+    } else {
+      ({ rows } = await this.db.query<MessageRow>(
+        `SELECT sub.id, sub.conversation_id, sub.sender_id, sub.sender_name, sub.body, sub.created_at
+         FROM (
+           ${BASE_SELECT}
+           WHERE m.conversation_id = $1
+           ORDER BY m.created_at DESC
+           LIMIT $2
+         ) sub
+         ORDER BY sub.created_at ASC`,
+        [conversationId, limit],
+      ));
     }
 
-    const { rows } = await this.db.query<MessageRow>(
-      `SELECT sub.id, sub.conversation_id, sub.sender_id, sub.sender_name, sub.body, sub.created_at
-       FROM (
-         ${BASE_SELECT}
-         WHERE m.conversation_id = $1
-         ORDER BY m.created_at DESC
-         LIMIT 100
-       ) sub
-       ORDER BY sub.created_at ASC`,
-      [conversationId],
-    );
-    return rows.map(rowToMessage);
+    const messages = rows.map(rowToMessage);
+
+    if (language) {
+      const translationMap = await this.translationCache.getMany(
+        messages.map((m) => m.id),
+        language,
+      );
+      for (const msg of messages) {
+        const t = translationMap.get(msg.id);
+        if (t !== undefined) msg.translatedBody = t;
+      }
+    }
+
+    return messages;
   }
 }

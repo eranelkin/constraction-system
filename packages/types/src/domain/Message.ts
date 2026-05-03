@@ -19,4 +19,5 @@ export interface Message {
   senderName: string;
   body: string;
   createdAt: Date;
+  translatedBody?: string;
 }

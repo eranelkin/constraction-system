@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,31 +10,79 @@ import {
   Alert,
   StatusBar,
   Image,
-} from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
-import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/token-storage';
-import { apiRequest } from '@/lib/api-client';
-import { ms, s, vs } from '@/lib/responsive';
-import type { AuthUser, ContactUser, PublicGroup, ConversationSummary } from '@constractor/types';
+} from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import {
+  getAccessToken,
+  getStoredUser,
+  clearSession,
+} from "@/lib/auth/token-storage";
+import { apiRequest } from "@/lib/api-client";
+import { ms, s, vs } from "@/lib/responsive";
+import { connectSocket, getSocket } from "@/lib/socket";
+import type {
+  AuthUser,
+  ContactUser,
+  PublicGroup,
+  ConversationSummary,
+} from "@constractor/types";
 
-const EMOJIS = ['🐻', '🦊', '🐯', '🦁', '🐸', '🦄', '🐙', '🦋', '🐺', '🦅', '🦉', '🐨'];
-const COLORS = ['#FF6B2B', '#FFD93D', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF'];
-const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+const EMOJIS = [
+  "🐻",
+  "🦊",
+  "🐯",
+  "🦁",
+  "🐸",
+  "🦄",
+  "🐙",
+  "🦋",
+  "🐺",
+  "🦅",
+  "🦉",
+  "🐨",
+];
+const COLORS = [
+  "#FF6B2B",
+  "#FFD93D",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#DDA0DD",
+  "#FF9FF3",
+  "#54A0FF",
+];
+const API_URL = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:4501";
 
 const AVATAR_SIZE = s(52);
 const HEADER_AVATAR_SIZE = s(34);
 
-function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
-  userId: string; fallbackEmoji: string; fallbackColor: string; size: number;
+function UserAvatar({
+  userId,
+  fallbackEmoji,
+  fallbackColor,
+  size,
+}: {
+  userId: string;
+  fallbackEmoji: string;
+  fallbackColor: string;
+  size: number;
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      borderWidth: 2.5, borderColor: '#1C1C2E', backgroundColor: fallbackColor,
-      overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0,
-    }}>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: 2.5,
+        borderColor: "#1C1C2E",
+        backgroundColor: fallbackColor,
+        overflow: "hidden",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
       {!failed ? (
         <Image
           source={{ uri: `${API_URL}/users/${userId}/avatar` }}
@@ -48,14 +96,29 @@ function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   );
 }
 
-function GroupAvatar({ emoji, color, size }: { emoji: string; color: string; size: number }) {
+function GroupAvatar({
+  emoji,
+  color,
+  size,
+}: {
+  emoji: string;
+  color: string;
+  size: number;
+}) {
   return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      borderWidth: 2.5, borderColor: '#1C1C2E', backgroundColor: color,
-      alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0,
-    }}>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: 2.5,
+        borderColor: "#1C1C2E",
+        backgroundColor: color,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
       <Text style={{ fontSize: size * 0.45 }}>{emoji}</Text>
     </View>
   );
@@ -65,24 +128,28 @@ function UnreadBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <View style={styles.badge}>
-      <Text style={styles.badgeText}>{count > 99 ? '99+' : String(count)}</Text>
+      <Text style={styles.badgeText}>{count > 99 ? "99+" : String(count)}</Text>
     </View>
   );
 }
 
-type Tab = 'msg' | 'tasks';
+type Tab = "msg" | "tasks";
 
 type ListItem =
-  | { kind: 'header'; title: string }
-  | { kind: 'contact'; user: ContactUser; index: number }
-  | { kind: 'group'; group: PublicGroup };
+  | { kind: "header"; title: string }
+  | { kind: "contact"; user: ContactUser; index: number }
+  | { kind: "group"; group: PublicGroup };
 
 export default function HomeScreen() {
-  const [tab, setTab] = useState<Tab>('msg');
+  const [tab, setTab] = useState<Tab>("msg");
   const [users, setUsers] = useState<ContactUser[]>([]);
   const [groups, setGroups] = useState<PublicGroup[]>([]);
-  const [contactUnread, setContactUnread] = useState<Map<string, number>>(new Map());
-  const [groupUnread, setGroupUnread] = useState<Map<string, number>>(new Map());
+  const [contactUnread, setContactUnread] = useState<Map<string, number>>(
+    new Map(),
+  );
+  const [groupUnread, setGroupUnread] = useState<Map<string, number>>(
+    new Map(),
+  );
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [me, setMe] = useState<AuthUser | null>(null);
@@ -95,60 +162,100 @@ export default function HomeScreen() {
     });
   }, []);
 
-  const loadData = useCallback(async (myId?: string) => {
-    const resolvedMyId = myId ?? meRef.current?.id ?? (await getStoredUser())?.id;
-    setLoading(true);
+  const loadData = useCallback(async (myId?: string, silent = false) => {
+    const resolvedMyId =
+      myId ?? meRef.current?.id ?? (await getStoredUser())?.id;
+    if (!silent) setLoading(true);
     try {
       const token = await getAccessToken();
       const t = token ?? undefined;
       const [usersData, groupsData, convsData] = await Promise.all([
-        apiRequest<{ users: ContactUser[] }>('/auth/users', { token: t }),
-        apiRequest<{ groups: PublicGroup[] }>('/groups/mine', { token: t }),
-        apiRequest<{ conversations: ConversationSummary[] }>('/messaging/conversations', { token: t }),
+        apiRequest<{ users: ContactUser[] }>("/auth/users", { token: t }),
+        apiRequest<{ groups: PublicGroup[] }>("/groups/mine", { token: t }),
+        apiRequest<{ conversations: ConversationSummary[] }>(
+          "/messaging/conversations",
+          { token: t },
+        ),
       ]);
-      setUsers(usersData.users);
-      setGroups(groupsData.groups);
+      if (!silent) {
+        setUsers(usersData.users);
+        setGroups(groupsData.groups);
+      }
 
       const newContactUnread = new Map<string, number>();
       const newGroupUnread = new Map<string, number>();
-      const groupConvIds = new Set(groupsData.groups.map((g) => g.conversationId).filter((id): id is string => id !== null));
+      const groupConvIds = new Set(
+        groupsData.groups
+          .map((g) => g.conversationId)
+          .filter((id): id is string => id !== null),
+      );
 
       for (const conv of convsData.conversations) {
         if (conv.unreadCount === 0) continue;
         if (groupConvIds.has(conv.id)) {
-          const group = groupsData.groups.find((g) => g.conversationId === conv.id);
+          const group = groupsData.groups.find(
+            (g) => g.conversationId === conv.id,
+          );
           if (group) newGroupUnread.set(group.id, conv.unreadCount);
         } else {
-          const other = conv.participants.find((p) => p.userId !== resolvedMyId);
+          const other = conv.participants.find(
+            (p) => p.userId !== resolvedMyId,
+          );
           if (other) newContactUnread.set(other.userId, conv.unreadCount);
         }
       }
       setContactUnread(newContactUnread);
       setGroupUnread(newGroupUnread);
     } catch {
-      Alert.alert('Error', 'Could not load messages');
+      if (!silent) Alert.alert("Error", "Could not load messages");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (tab === 'msg') void loadData(meRef.current?.id);
+    if (tab === "msg") void loadData(meRef.current?.id);
   }, [tab, loadData]);
 
+  const isFirstFocusRef = useRef(true);
+
+  // On every focus: reload data (with delay when returning from chat so POST /read
+  // completes first) and re-register the socket badge listener (handles reconnections).
   useFocusEffect(
     useCallback(() => {
-      void loadData(meRef.current?.id);
+      const delay = isFirstFocusRef.current ? 0 : 300;
+      isFirstFocusRef.current = false;
+
+      const timer = setTimeout(() => {
+        void loadData(meRef.current?.id);
+      }, delay);
+
+      void (async () => {
+        const token = await getAccessToken();
+        if (!token) return;
+        const sock = connectSocket(token);
+        sock.on("conversation_updated", () => {
+          void loadData(meRef.current?.id, true);
+        });
+      })();
+
+      return () => {
+        clearTimeout(timer);
+        getSocket()?.off("conversation_updated");
+      };
     }, [loadData]),
   );
 
   function handleLogout() {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Logout', style: 'destructive',
+        text: "Logout",
+        style: "destructive",
         onPress: () => {
-          void clearSession().then(() => router.replace('/(auth)/login' as never));
+          void clearSession().then(() =>
+            router.replace("/(auth)/login" as never),
+          );
         },
       },
     ]);
@@ -159,11 +266,15 @@ export default function HomeScreen() {
     try {
       const token = await getAccessToken();
       const data = await apiRequest<{ conversation: { id: string } }>(
-        '/messaging/conversations',
-        { method: 'POST', body: { participantId: user.id }, token: token ?? undefined },
+        "/messaging/conversations",
+        {
+          method: "POST",
+          body: { participantId: user.id },
+          token: token ?? undefined,
+        },
       );
       router.push({
-        pathname: '/(messages)/[id]',
+        pathname: "/(messages)/[id]",
         params: {
           id: data.conversation.id,
           userName: user.displayName,
@@ -173,7 +284,7 @@ export default function HomeScreen() {
         },
       } as never);
     } catch {
-      Alert.alert('Error', 'Could not open chat');
+      Alert.alert("Error", "Could not open chat");
     } finally {
       setStarting(null);
     }
@@ -181,29 +292,31 @@ export default function HomeScreen() {
 
   function openGroup(group: PublicGroup) {
     if (!group.conversationId) {
-      Alert.alert('Error', 'This group has no conversation yet');
+      Alert.alert("Error", "This group has no conversation yet");
       return;
     }
     router.push({
-      pathname: '/(messages)/[id]',
+      pathname: "/(messages)/[id]",
       params: {
         id: group.conversationId,
         userName: group.name,
-        isGroup: 'true',
-        avatarEmoji: group.emoji ?? '🏘️',
-        avatarColor: group.color ?? '#4ECDC4',
+        isGroup: "true",
+        avatarEmoji: group.emoji ?? "🏘️",
+        avatarColor: group.color ?? "#4ECDC4",
       },
     } as never);
   }
 
   const listData: ListItem[] = [];
   if (users.length > 0) {
-    listData.push({ kind: 'header', title: '💬 Direct Messages' });
-    users.forEach((user, index) => listData.push({ kind: 'contact', user, index }));
+    listData.push({ kind: "header", title: "💬 Direct Messages" });
+    users.forEach((user, index) =>
+      listData.push({ kind: "contact", user, index }),
+    );
   }
   if (groups.length > 0) {
-    listData.push({ kind: 'header', title: '🏘️ Groups' });
-    groups.forEach((group) => listData.push({ kind: 'group', group }));
+    listData.push({ kind: "header", title: "🏘️ Groups" });
+    groups.forEach((group) => listData.push({ kind: "group", group }));
   }
 
   return (
@@ -212,18 +325,27 @@ export default function HomeScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle} numberOfLines={1}>🏗️ Constractor</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          🏗️ Constractor
+        </Text>
         <View style={styles.headerRight}>
           {me && (
             <UserAvatar
               userId={me.id}
-              fallbackEmoji={EMOJIS[me.id.charCodeAt(0) % EMOJIS.length] ?? '😊'}
-              fallbackColor={COLORS[me.id.charCodeAt(0) % COLORS.length] ?? '#FF6B2B'}
+              fallbackEmoji={
+                EMOJIS[me.id.charCodeAt(0) % EMOJIS.length] ?? "😊"
+              }
+              fallbackColor={
+                COLORS[me.id.charCodeAt(0) % COLORS.length] ?? "#FF6B2B"
+              }
               size={HEADER_AVATAR_SIZE}
             />
           )}
           <Pressable
-            style={({ pressed }) => [styles.logoutBtn, pressed && styles.logoutBtnPressed]}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              pressed && styles.logoutBtnPressed,
+            ]}
             onPress={handleLogout}
           >
             <Text style={styles.logoutBtnText}>⏻</Text>
@@ -234,21 +356,27 @@ export default function HomeScreen() {
       {/* Tab pills */}
       <View style={styles.tabRow}>
         <Pressable
-          style={[styles.tab, tab === 'msg' && styles.tabActive]}
-          onPress={() => setTab('msg')}
+          style={[styles.tab, tab === "msg" && styles.tabActive]}
+          onPress={() => setTab("msg")}
         >
-          <Text style={[styles.tabText, tab === 'msg' && styles.tabTextActive]}>💬 Msg</Text>
+          <Text style={[styles.tabText, tab === "msg" && styles.tabTextActive]}>
+            💬 Chats
+          </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, tab === 'tasks' && styles.tabActive]}
-          onPress={() => setTab('tasks')}
+          style={[styles.tab, tab === "tasks" && styles.tabActive]}
+          onPress={() => setTab("tasks")}
         >
-          <Text style={[styles.tabText, tab === 'tasks' && styles.tabTextActive]}>✅ Tasks</Text>
+          <Text
+            style={[styles.tabText, tab === "tasks" && styles.tabTextActive]}
+          >
+            ✅ Tasks
+          </Text>
         </Pressable>
       </View>
 
       {/* Content */}
-      {tab === 'msg' ? (
+      {tab === "msg" ? (
         loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#FF6B2B" />
@@ -258,32 +386,46 @@ export default function HomeScreen() {
           <FlatList
             data={listData}
             keyExtractor={(item) => {
-              if (item.kind === 'header') return `header-${item.title}`;
-              if (item.kind === 'contact') return `contact-${item.user.id}`;
+              if (item.kind === "header") return `header-${item.title}`;
+              if (item.kind === "contact") return `contact-${item.user.id}`;
               return `group-${item.group.id}`;
             }}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
-              if (item.kind === 'header') {
+              if (item.kind === "header") {
                 return <Text style={styles.sectionHeader}>{item.title}</Text>;
               }
-              if (item.kind === 'contact') {
-                const emoji = EMOJIS[item.index % EMOJIS.length] ?? '😊';
-                const color = COLORS[item.index % COLORS.length] ?? '#FF6B2B';
+              if (item.kind === "contact") {
+                const emoji = EMOJIS[item.index % EMOJIS.length] ?? "😊";
+                const color = COLORS[item.index % COLORS.length] ?? "#FF6B2B";
                 const isLoading = starting === item.user.id;
                 const unread = contactUnread.get(item.user.id) ?? 0;
                 return (
                   <Pressable
-                    style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
+                    style={({ pressed }) => [
+                      styles.card,
+                      (pressed || isLoading) && styles.cardPressed,
+                    ]}
                     onPress={() => void openChat(item.user, item.index)}
                     disabled={isLoading}
                   >
-                    <UserAvatar userId={item.user.id} fallbackEmoji={emoji} fallbackColor={color} size={AVATAR_SIZE} />
+                    <UserAvatar
+                      userId={item.user.id}
+                      fallbackEmoji={emoji}
+                      fallbackColor={color}
+                      size={AVATAR_SIZE}
+                    />
                     <View style={styles.cardInfo}>
-                      <Text style={styles.cardName} numberOfLines={1}>{item.user.displayName}</Text>
+                      <Text style={styles.cardName} numberOfLines={1}>
+                        {item.user.displayName}
+                      </Text>
                       <Text style={styles.cardSub} numberOfLines={1}>
-                        {item.user.role === 'manager' ? '👔 Manager' : item.user.role === 'admin' ? '⭐ Admin' : '👷 Worker'}
+                        {item.user.role === "manager"
+                          ? "👔 Manager"
+                          : item.user.role === "admin"
+                            ? "⭐ Admin"
+                            : "👷 Worker"}
                       </Text>
                     </View>
                     {isLoading ? (
@@ -302,15 +444,30 @@ export default function HomeScreen() {
               const unread = groupUnread.get(g.id) ?? 0;
               return (
                 <Pressable
-                  style={({ pressed }) => [styles.card, (pressed || isLoading) && styles.cardPressed]}
+                  style={({ pressed }) => [
+                    styles.card,
+                    (pressed || isLoading) && styles.cardPressed,
+                  ]}
                   onPress={() => openGroup(g)}
                   disabled={isLoading}
                 >
-                  <GroupAvatar emoji={g.emoji ?? '🏘️'} color={g.color ?? '#4ECDC4'} size={AVATAR_SIZE} />
+                  <GroupAvatar
+                    emoji={g.emoji ?? "🏘️"}
+                    color={g.color ?? "#4ECDC4"}
+                    size={AVATAR_SIZE}
+                  />
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardName} numberOfLines={1}>{g.name}</Text>
-                    <Text style={styles.cardSub} numberOfLines={1}>👥 {g.memberCount} member{g.memberCount !== 1 ? 's' : ''}</Text>
-                    {g.description ? <Text style={styles.cardDesc} numberOfLines={1}>{g.description}</Text> : null}
+                    <Text style={styles.cardName} numberOfLines={1}>
+                      {g.name}
+                    </Text>
+                    <Text style={styles.cardSub} numberOfLines={1}>
+                      👥 {g.memberCount} member{g.memberCount !== 1 ? "s" : ""}
+                    </Text>
+                    {g.description ? (
+                      <Text style={styles.cardDesc} numberOfLines={1}>
+                        {g.description}
+                      </Text>
+                    ) : null}
                   </View>
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#FF6B2B" />
@@ -327,7 +484,9 @@ export default function HomeScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>👥</Text>
                 <Text style={styles.emptyTitle}>No teammates yet</Text>
-                <Text style={styles.emptySubtitle}>Your team will appear here</Text>
+                <Text style={styles.emptySubtitle}>
+                  Your team will appear here
+                </Text>
               </View>
             }
           />
@@ -348,28 +507,28 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FFF9E6',
+    backgroundColor: "#FFF9E6",
   },
   header: {
-    backgroundColor: '#FF6B2B',
+    backgroundColor: "#FF6B2B",
     paddingHorizontal: ms(16),
     paddingVertical: ms(12),
     borderBottomWidth: 2.5,
-    borderBottomColor: '#1C1C2E',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: "#1C1C2E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   headerTitle: {
     fontSize: ms(22),
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontWeight: "900",
+    color: "#FFFFFF",
     letterSpacing: 0.5,
     flexShrink: 1,
   },
   headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: ms(8),
     flexShrink: 0,
   },
@@ -377,21 +536,21 @@ const styles = StyleSheet.create({
     width: s(34),
     height: s(34),
     borderRadius: s(17),
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: "rgba(255,255,255,0.2)",
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "rgba(255,255,255,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoutBtnPressed: {
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: "rgba(255,255,255,0.35)",
   },
   logoutBtnText: {
     fontSize: ms(15),
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   tabRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     padding: ms(12),
     gap: ms(10),
   },
@@ -400,36 +559,36 @@ const styles = StyleSheet.create({
     paddingVertical: ms(11),
     borderRadius: 999,
     borderWidth: 2.5,
-    borderColor: '#1C1C2E',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#1C1C2E',
+    borderColor: "#1C1C2E",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#1C1C2E",
     shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 5,
   },
   tabActive: {
-    backgroundColor: '#FF6B2B',
+    backgroundColor: "#FF6B2B",
   },
   tabText: {
     fontSize: ms(15),
-    fontWeight: '800',
-    color: '#1C1C2E',
+    fontWeight: "800",
+    color: "#1C1C2E",
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   center: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: ms(12),
   },
   loadingText: {
     fontSize: ms(15),
-    fontWeight: '700',
-    color: '#1C1C2E',
+    fontWeight: "700",
+    color: "#1C1C2E",
   },
   list: {
     padding: ms(12),
@@ -438,24 +597,24 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontSize: ms(12),
-    fontWeight: '800',
-    color: '#888',
-    textTransform: 'uppercase',
+    fontWeight: "800",
+    color: "#888",
+    textTransform: "uppercase",
     letterSpacing: 0.8,
     marginTop: ms(4),
     marginBottom: ms(2),
     paddingHorizontal: ms(4),
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     borderRadius: ms(16),
     borderWidth: 2.5,
-    borderColor: '#1C1C2E',
+    borderColor: "#1C1C2E",
     padding: ms(12),
     gap: ms(12),
-    shadowColor: '#1C1C2E',
+    shadowColor: "#1C1C2E",
     shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
@@ -472,53 +631,53 @@ const styles = StyleSheet.create({
   },
   cardName: {
     fontSize: ms(16),
-    fontWeight: '800',
-    color: '#1C1C2E',
+    fontWeight: "800",
+    color: "#1C1C2E",
   },
   cardSub: {
     fontSize: ms(12),
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
     marginTop: ms(2),
   },
   cardDesc: {
     fontSize: ms(11),
-    fontWeight: '500',
-    color: '#999',
+    fontWeight: "500",
+    color: "#999",
     marginTop: ms(2),
   },
   cardRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: ms(5),
     flexShrink: 0,
   },
   badge: {
-    backgroundColor: '#2ECC71',
+    backgroundColor: "#2ECC71",
     borderRadius: 999,
     minWidth: ms(20),
     height: ms(20),
     paddingHorizontal: ms(4),
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
-    borderColor: '#1C1C2E',
+    borderColor: "#1C1C2E",
   },
   badgeText: {
     fontSize: ms(10),
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   chevron: {
     fontSize: ms(24),
-    fontWeight: '900',
-    color: '#1C1C2E',
+    fontWeight: "900",
+    color: "#1C1C2E",
     lineHeight: ms(28),
   },
   empty: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingTop: vs(60),
     gap: ms(8),
   },
@@ -527,29 +686,29 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: ms(18),
-    fontWeight: '800',
-    color: '#1C1C2E',
+    fontWeight: "800",
+    color: "#1C1C2E",
   },
   emptySubtitle: {
     fontSize: ms(13),
-    fontWeight: '500',
-    color: '#888',
+    fontWeight: "500",
+    color: "#888",
   },
   comingSoon: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: ms(20),
   },
   comingSoonCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: ms(20),
     borderWidth: 2.5,
-    borderColor: '#1C1C2E',
+    borderColor: "#1C1C2E",
     padding: ms(28),
-    alignItems: 'center',
-    width: '100%',
-    shadowColor: '#1C1C2E',
+    alignItems: "center",
+    width: "100%",
+    shadowColor: "#1C1C2E",
     shadowOffset: { width: 5, height: 5 },
     shadowOpacity: 1,
     shadowRadius: 0,
@@ -561,12 +720,12 @@ const styles = StyleSheet.create({
   },
   comingSoonTitle: {
     fontSize: ms(28),
-    fontWeight: '900',
-    color: '#1C1C2E',
+    fontWeight: "900",
+    color: "#1C1C2E",
   },
   comingSoonSub: {
     fontSize: ms(15),
-    fontWeight: '600',
-    color: '#888',
+    fontWeight: "600",
+    color: "#888",
   },
 });

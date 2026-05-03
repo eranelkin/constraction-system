@@ -46,7 +46,7 @@ function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
     </View>
   );
 }
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Audio } from 'expo-av';
 import { apiRequest } from '../../lib/api-client';
 import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
@@ -75,8 +75,8 @@ export default function ThreadScreen() {
   const [input, setInput] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   const [userLanguage, setUserLanguage] = useState<string>('en');
-  const [translations, setTranslations] = useState<Record<string, string>>({});
-  const [translating, setTranslating] = useState<Record<string, boolean>>({});
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Voice state
   const [voicePhase, setVoicePhase] = useState<VoicePhase | null>(null);
@@ -86,18 +86,46 @@ export default function ThreadScreen() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const lastIdRef = useRef<string | undefined>(undefined);
+  const oldestIdRef = useRef<string | undefined>(undefined);
   const flatListRef = useRef<FlatList<Message>>(null);
   const translatingSet = useRef<Set<string>>(new Set());
+  const userIdRef = useRef<string | null>(null);
+  const userLanguageRef = useRef<string>('en');
 
   const fetchToken = useCallback(async () => {
     return (await getAccessToken()) ?? undefined;
   }, []);
 
+  const loadOlder = useCallback(async () => {
+    if (!hasMore || loadingMore || !oldestIdRef.current || !id) return;
+    setLoadingMore(true);
+    try {
+      const token = await fetchToken();
+      const data = await apiRequest<ListMessagesResponse>(
+        `/messaging/conversations/${id}/messages?before=${oldestIdRef.current}`,
+        { token },
+      );
+      if (data.messages.length > 0) {
+        setMessages((prev) => [...data.messages, ...prev]);
+        oldestIdRef.current = data.messages[0]?.id;
+      }
+      setHasMore(data.messages.length === 50);
+    } catch {
+      // silently fail — user can retry by scrolling
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [id, hasMore, loadingMore, fetchToken]);
+
   useEffect(() => {
     void (async () => {
       const user = await getStoredUser();
-      setUserId(user?.id ?? null);
-      setUserLanguage((user as { language?: string } | null)?.language ?? 'en');
+      const uid = user?.id ?? null;
+      const lang = (user as { language?: string } | null)?.language ?? 'en';
+      setUserId(uid);
+      setUserLanguage(lang);
+      userIdRef.current = uid;
+      userLanguageRef.current = lang;
     })();
   }, []);
 
@@ -112,6 +140,19 @@ export default function ThreadScreen() {
     })();
   }, [id, fetchToken]);
 
+  // Mark as read again when leaving so home screen badge is cleared immediately.
+  // The 300ms delay in the home screen useFocusEffect gives this request time to land.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (!id) return;
+        void fetchToken().then((t) =>
+          apiRequest(`/messaging/conversations/${id}/read`, { method: 'POST', token: t }),
+        ).catch(() => {});
+      };
+    }, [id, fetchToken]),
+  );
+
   // Load messages + subscribe to realtime updates
   useEffect(() => {
     if (!id) return;
@@ -119,22 +160,70 @@ export default function ThreadScreen() {
     const load = async () => {
       try {
         const token = await fetchToken();
+
+        // Join the socket room BEFORE loading messages to avoid a race condition:
+        // any message sent while the REST call is in-flight arrives via socket
+        // and is deduplicated by the existing-ID check below.
+        const sock = connectSocket(token ?? '');
+        sock.emit('join_conversation', id);
+        sock.on('new_message', (payload: { message: Message }) => {
+          const incoming = payload.message;
+
+          // Mark as read — user is actively viewing this chat
+          void fetchToken().then((t) =>
+            apiRequest(`/messaging/conversations/${id}/read`, { method: 'POST', token: t }),
+          );
+
+          const isOwn = incoming.senderId === userIdRef.current;
+          if (isOwn || incoming.translatedBody) {
+            // Own message or already translated (server cache hit) → show immediately
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === incoming.id)) return prev;
+              lastIdRef.current = incoming.id;
+              return [...prev, incoming];
+            });
+            return;
+          }
+
+          // Block the translate useEffect from racing with us
+          translatingSet.current.add(incoming.id);
+
+          // Translate before showing to avoid the untranslated→translated flicker.
+          // If the REST initial-load response races and already put this message into
+          // state (untranslated), we update it in-place rather than skipping it.
+          void (async () => {
+            let msg = incoming;
+            try {
+              const token = await fetchToken();
+              const data = await apiRequest<{ translatedText: string }>('/translate', {
+                method: 'POST',
+                body: { text: incoming.body, targetLanguage: userLanguageRef.current, messageId: incoming.id },
+                token,
+              });
+              msg = { ...incoming, translatedBody: data.translatedText };
+            } catch {
+              translatingSet.current.delete(incoming.id);
+            }
+            setMessages((prev) => {
+              const alreadyInState = prev.some((m) => m.id === msg.id);
+              if (alreadyInState) {
+                // REST raced us — update the existing entry with the translation
+                return prev.map((m) => (m.id === msg.id ? msg : m));
+              }
+              lastIdRef.current = msg.id;
+              return [...prev, msg];
+            });
+          })();
+        });
+
         const data = await apiRequest<ListMessagesResponse>(
           `/messaging/conversations/${id}/messages`,
           { token },
         );
         setMessages(data.messages);
         lastIdRef.current = data.messages.at(-1)?.id;
-
-        const sock = connectSocket(token ?? '');
-        sock.emit('join_conversation', id);
-        sock.on('new_message', (payload: { message: Message }) => {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.message.id)) return prev;
-            lastIdRef.current = payload.message.id;
-            return [...prev, payload.message];
-          });
-        });
+        oldestIdRef.current = data.messages[0]?.id;
+        setHasMore(data.messages.length === 50);
       } catch (err) {
         Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load messages');
       }
@@ -274,40 +363,33 @@ export default function ThreadScreen() {
     return `${m}:${s}`;
   }
 
-  // ── Auto-translate received messages ────────────────────────────────────
+  // ── Translate socket-delivered messages (initial load messages already have translatedBody) ──
 
   useEffect(() => {
     if (!userId || !userLanguage) return;
 
-    const toTranslate = messages.filter(
-      (m) => m.senderId !== userId && !translatingSet.current.has(m.id),
+    const needsTranslation = messages.filter(
+      (m) => m.senderId !== userId && !m.translatedBody && !translatingSet.current.has(m.id),
     );
-    if (!toTranslate.length) return;
+    if (needsTranslation.length === 0) return;
 
-    toTranslate.forEach((m) => translatingSet.current.add(m.id));
-
-    setTranslating((prev) => {
-      const next = { ...prev };
-      toTranslate.forEach((m) => { next[m.id] = true; });
-      return next;
-    });
+    needsTranslation.forEach((m) => translatingSet.current.add(m.id));
 
     void (async () => {
       const token = await fetchToken();
       await Promise.all(
-        toTranslate.map(async (m) => {
+        needsTranslation.map(async (m) => {
           try {
             const data = await apiRequest<{ translatedText: string }>('/translate', {
               method: 'POST',
-              body: { text: m.body, targetLanguage: userLanguage },
+              body: { text: m.body, targetLanguage: userLanguage, messageId: m.id },
               token,
             });
-            setTranslations((prev) => ({ ...prev, [m.id]: data.translatedText }));
+            setMessages((prev) =>
+              prev.map((msg) => msg.id === m.id ? { ...msg, translatedBody: data.translatedText } : msg),
+            );
           } catch {
-            // silently fail — show original text
             translatingSet.current.delete(m.id);
-          } finally {
-            setTranslating((prev) => ({ ...prev, [m.id]: false }));
           }
         }),
       );
@@ -319,8 +401,8 @@ export default function ThreadScreen() {
 
   function renderItem({ item }: { item: Message }) {
     const isMe = item.senderId === userId;
-    const translated = translations[item.id];
-    const isTranslating = translating[item.id] ?? false;
+    const translated = item.translatedBody;
+    const isTranslating = false;
 
     const senderInitial = (item.senderName ?? '?').charAt(0).toUpperCase();
     const senderColor = SENDER_COLORS[item.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
@@ -390,6 +472,13 @@ export default function ThreadScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => void loadOlder()}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore
+              ? <ActivityIndicator size="small" color="#FF6B2B" style={{ padding: ms(12) }} />
+              : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>👋</Text>

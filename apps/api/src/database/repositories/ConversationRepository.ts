@@ -44,6 +44,7 @@ export class ConversationRepository implements IConversationRepository {
        FROM conversations c
        JOIN conversation_participants p1 ON p1.conversation_id = c.id AND p1.user_id = $1
        JOIN conversation_participants p2 ON p2.conversation_id = c.id AND p2.user_id = $2
+       WHERE c.type = 'direct'
        LIMIT 1`,
       [idA, idB],
     );

@@ -2,7 +2,7 @@
 
 > **Purpose:** Cross-machine continuity. Read this before starting any new session.
 > Update this file on demand: ask Claude to "update Session.md" after significant work.
-> Last updated: 2026-05-02
+> Last updated: 2026-05-03
 
 ---
 
@@ -69,7 +69,7 @@ cp .env.example apps/api/.env                      # copy env template
 pnpm install
 pnpm --filter @constractor/types build
 pnpm --filter @constractor/config build
-pnpm --filter @constractor/api run db:migrate      # runs all 6 migrations
+pnpm --filter @constractor/api run db:migrate      # runs all 8 migrations
 ```
 
 ### Daily start
@@ -114,9 +114,11 @@ Switch via ENV flags — never change business logic to swap providers.
 | `IAIProvider` | `MockAIProvider` | `OpenAIProvider` |
 | `IStorageProvider` | `LocalStorageProvider` | `S3StorageProvider` |
 | `IQueueProvider` | `InMemoryQueueProvider` | `BullMQProvider` |
-| `IRealtimeProvider` | `InMemoryRealtimeProvider` | `SocketIOProvider` |
+| `IRealtimeProvider` | `InMemoryRealtimeProvider` | `SocketIOProvider` ✅ |
 | `ISpeechProvider` | `MockSpeechProvider` / `GroqSpeechProvider` | `GroqSpeechProvider` |
 | `ITranslationProvider` | `MockTranslationProvider` / `GroqTranslationProvider` | `GroqTranslationProvider` |
+
+**Important:** `USE_REAL_REALTIME=true` is required in `apps/api/.env` for socket messages to reach mobile clients. The default `InMemoryRealtimeProvider` only fires server-side callbacks — it does not send anything over the network.
 
 ENV flags (all `false` = zero cost dev): `USE_REAL_AI`, `USE_REAL_STORAGE`, `USE_REAL_QUEUE`, `USE_REAL_REALTIME`, `USE_REAL_SPEECH`, `USE_REAL_TRANSLATION`
 
@@ -208,6 +210,25 @@ CREATE INDEX group_members_user_idx ON group_members(user_id);
 ```
 Every group auto-creates a group conversation when created via `POST /groups`. `conversation_id` is stored back on the group.
 
+### Migration 007 — user active flag
+```sql
+ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
+```
+`is_active = false` → 403 on login/token refresh. Inactive users excluded from contact list.
+
+### Migration 008 — message translation cache
+```sql
+message_translations (
+  message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  language   VARCHAR(10) NOT NULL,
+  translated_body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (message_id, language)
+)
+```
+Translations are computed by Groq once and stored permanently per `(message_id, language)`.
+`MessageRepository.list()` bulk-fetches cached translations for the requesting user's language and attaches `translatedBody` to each message. Zero extra Groq calls on re-entry to a chat.
+
 Run migrations: `pnpm --filter @constractor/api run db:migrate`
 The runner is idempotent — safe to re-run.
 
@@ -236,13 +257,15 @@ GET  /users/:id/avatar                         → image bytes               (pu
 POST /speech/transcribe                        → { text }                  (body: { audio: base64, mimeType })
                                                                             Uses user's JWT language for Groq Whisper
 
-POST /translate                                → { translatedText }        (body: { text, targetLanguage? })
+POST /translate                                → { translatedText }        (body: { text, targetLanguage?, messageId? })
                                                                             targetLanguage defaults to req.user.language from JWT
+                                                                            messageId enables cache: checks DB before Groq, stores result after
 
 GET  /messaging/conversations                  → { conversations: ConversationSummary[] }
                                                                             includes unreadCount per conversation
 POST /messaging/conversations                  → { conversation }          (body: participantId; finds or creates)
-GET  /messaging/conversations/:id/messages     → { messages[] }            (?after=<messageId> for incremental polling)
+GET  /messaging/conversations/:id/messages     → { messages[] }            (?after=<uuid> newer, ?before=<uuid> older, ?limit=1-100 default 50)
+                                                                            each message includes translatedBody if cached for req.user.language
 POST /messaging/conversations/:id/messages     → { message }               (body: body)
 POST /messaging/conversations/:id/read         → 204                       (updates last_read_at → clears unread badge)
 
@@ -334,12 +357,11 @@ After editing config: `pnpm --filter @constractor/config build`
 - Supported: en, he, ar, ru, es, fr, de, it, pt, zh, ja, ko, tr, hi
 
 ### Mobile auto-translate (in chat screen)
-- `useEffect` watches `[messages, userId, userLanguage]`
-- Translates all incoming messages not from self, on arrival
-- `translatingSet` ref prevents double-translating the same message ID
-- Shows `ActivityIndicator` spinner in bubble while translating
-- Replaces bubble text with translated result (no separate bubble)
-- Silent failure — shows original text if translation fails
+- **On initial load:** `GET /messages` returns `translatedBody` for all messages with a cached translation — zero separate `/translate` calls.
+- **Socket-delivered new messages:** A minimal `useEffect` watches `[messages]` for messages without `translatedBody`. Fires one `/translate` call per new message, passing `messageId` to populate the cache. On next visit, that message is served pre-translated by `list()`.
+- `translatingSet` ref prevents double-translating the same message ID.
+- Silent failure — shows original text if translation fails.
+- **English users (`language === 'en'`) skip translation entirely** — the effect short-circuits immediately.
 
 ---
 
@@ -440,11 +462,12 @@ Groups = named collections of users (name + description + color + emoji). Manage
 - **Bubbles:** orange (self, right) / white (others, left) with comic borders
   - Direct: loads other user's avatar from API
   - Group: colored circle with sender's first initial (color derived from `senderId.charCodeAt(0)`)
-- **3-second polling** with `?after=<lastMessageId>` incremental fetch; deduplicates by existing IDs before appending
-- **Auto-translate** all incoming messages (see §9)
-- **Mark as read:** `POST /messaging/conversations/:id/read` called on mount
-- **Voice:** record (expo-av) → Groq Whisper transcribe → edit → send
-- **Input bar:** text input + send ➤ / voice 🎙️ toggle
+- **Real-time via Socket.IO** (`USE_REAL_REALTIME=true` required). Socket join/leave on screen mount/unmount. New messages arrive via `new_message` event and are appended to state.
+- **Backward pagination:** `onEndReached` on the inverted FlatList → `loadOlder()` fetches `?before=<oldestId>` — loads 50 older messages and prepends to list. Spinner shown at top while loading.
+- **Auto-translate** — see §9. Initial load: translations from DB cache. Socket messages: one `/translate` call per new message.
+- **Mark as read:** `POST /messaging/conversations/:id/read` called on mount.
+- **Voice:** record (expo-av) → Groq Whisper transcribe → edit → send.
+- **Input bar:** text input + send ➤ / voice 🎙️ toggle.
 
 ### Token storage
 `apps/mobile/src/lib/auth/token-storage.ts` — `expo-secure-store` (encrypted). All methods async.
@@ -454,16 +477,16 @@ Groups = named collections of users (name + description + color + emoji). Manage
 ## 14. Pending / Next Steps
 
 1. **Tasks module** — main next priority
-   - DB migration 007: `tasks` table with `job_id`, `assigned_to`, `title`, `status`, `priority`, `due_date`
+   - DB migration: `tasks` table with `job_id`, `assigned_to`, `title`, `status`, `priority`, `due_date`
    - API: `GET/POST /jobs/:id/tasks`, `PATCH /tasks/:id`, `DELETE /tasks/:id`
    - Web `/manage/tasks`: manager creates/assigns tasks
    - Mobile Tasks tab: worker sees their assigned tasks as status cards
 
-2. **Real-time messaging** — replace 3-second polling with WebSocket (`SocketIOProvider`)
+2. **Push notifications** — Expo Notifications for new messages and task assignments
 
-3. **Push notifications** — Expo Notifications for new messages and task assignments
+3. **Web: token auto-refresh** — `api-client.ts` has no refresh logic; after 15 min, API calls return 401 silently
 
-4. **Web: token auto-refresh** — `api-client.ts` has no refresh logic; after 15 min, user must re-login
+4. **Socket reconnect on foreground** — no `AppState` listener exists; if app is backgrounded and socket disconnects, messages may be missed until the screen is re-mounted
 
 ---
 
@@ -471,7 +494,7 @@ Groups = named collections of users (name + description + color + emoji). Manage
 
 1. **Web: access token expiry** — no auto-refresh. After 15 min, API calls return 401 silently.
 2. **Web: jobs/dashboard pages** — `/jobs`, `/dashboard`, etc. still use plain styles, not comic design.
-3. **Mobile: login screen** — plain style, not yet comic-styled.
+3. **Socket reconnect on app foreground** — no `AppState` listener. If a device is backgrounded and the socket drops, messages sent while backgrounded won't appear in real-time until the chat screen is re-mounted. Workaround: kill and reopen the app (auto-login restores session and REST fetch catches up).
 
 ---
 
@@ -485,6 +508,7 @@ Groups = named collections of users (name + description + color + emoji). Manage
 | DB migrations | `apps/api/src/database/migrations/00x_*.sql` |
 | Group repository | `apps/api/src/database/repositories/GroupRepository.ts` |
 | Conversation repository | `apps/api/src/database/repositories/ConversationRepository.ts` |
+| Translation cache repository | `apps/api/src/database/repositories/TranslationCacheRepository.ts` |
 | Groups router | `apps/api/src/modules/groups/groups.router.ts` |
 | Messaging router | `apps/api/src/modules/messaging/messaging.router.ts` |
 | Speech provider (Groq) | `apps/api/src/providers/speech/GroqSpeechProvider.ts` |
@@ -508,6 +532,7 @@ Groups = named collections of users (name + description + color + emoji). Manage
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/constractor
 JWT_SECRET=<secret>
 GROQ_API_KEY=<key>           # required for real speech + translation
+USE_REAL_REALTIME=true       # Socket.IO — required for mobile chat to receive messages
 USE_REAL_SPEECH=true         # Groq Whisper STT
-USE_REAL_TRANSLATION=true    # Groq LLaMA translation
+USE_REAL_TRANSLATION=true    # Groq LLaMA translation + DB cache
 ```

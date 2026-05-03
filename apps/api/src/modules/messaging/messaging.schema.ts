@@ -8,6 +8,8 @@ export const sendMessageSchema = z.object({
   body: z.string().min(1).max(4000),
 });
 
-export const messagesAfterSchema = z.object({
-  after: z.string().uuid().optional(),
+export const messagesQuerySchema = z.object({
+  after:  z.string().uuid().optional(),
+  before: z.string().uuid().optional(),
+  limit:  z.coerce.number().int().min(1).max(100).optional(),
 });

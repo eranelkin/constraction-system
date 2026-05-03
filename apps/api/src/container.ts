@@ -14,6 +14,7 @@ import { InMemoryRealtimeProvider } from './providers/realtime/InMemoryRealtimeP
 import { SocketIOProvider } from './providers/realtime/SocketIOProvider.js';
 import type { Server } from 'socket.io';
 import { GroupRepository } from './database/repositories/GroupRepository.js';
+import { TranslationCacheRepository } from './database/repositories/TranslationCacheRepository.js';
 import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
 import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
 import { MockTranslationProvider } from './providers/translation/MockTranslationProvider.js';
@@ -40,6 +41,7 @@ export interface AppContainer {
   realtimeProvider: IRealtimeProvider;
   speechProvider: ISpeechProvider;
   translationProvider: ITranslationProvider;
+  translationCacheRepository: TranslationCacheRepository;
   groupRepository: IGroupRepository;
 }
 
@@ -47,7 +49,8 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
   const db = new PostgreSQLAdapter(config.DATABASE_URL);
   const userRepository = new UserRepository(db);
   const conversationRepository = new ConversationRepository(db);
-  const messageRepository = new MessageRepository(db);
+  const translationCacheRepository = new TranslationCacheRepository(db);
+  const messageRepository = new MessageRepository(db, translationCacheRepository);
   const jobRepository = new JobRepository(db);
   const jobApplicationRepository = new JobApplicationRepository(db);
   const groupRepository = new GroupRepository(db);
@@ -92,6 +95,7 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
     realtimeProvider,
     speechProvider,
     translationProvider,
+    translationCacheRepository,
     groupRepository,
   };
 }

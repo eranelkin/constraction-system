@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { AppContainer } from '../../container.js';
 import { createAuthMiddleware } from '../auth/auth.middleware.js';
 import { ForbiddenError } from '../../shared/errors.js';
-import { startConversationSchema, sendMessageSchema, messagesAfterSchema } from './messaging.schema.js';
+import { startConversationSchema, sendMessageSchema, messagesQuerySchema } from './messaging.schema.js';
 
 export function createMessagingRouter(container: AppContainer): Router {
   const router = Router();
@@ -49,8 +49,13 @@ export function createMessagingRouter(container: AppContainer): Router {
       const allowed = await conversationRepository.isParticipant(id, req.user!.id);
       if (!allowed) throw new ForbiddenError();
 
-      const { after } = messagesAfterSchema.parse(req.query);
-      const messages = await messageRepository.list(id, after);
+      const { after, before, limit } = messagesQuerySchema.parse(req.query);
+      const messages = await messageRepository.list(id, {
+        ...(after !== undefined && { afterId: after }),
+        ...(before !== undefined && { beforeId: before }),
+        ...(limit !== undefined && { limit }),
+        language: req.user!.language,
+      });
       res.json({ messages });
     } catch (err) {
       next(err);
