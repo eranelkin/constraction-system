@@ -15,6 +15,9 @@ import { SocketIOProvider } from './providers/realtime/SocketIOProvider.js';
 import type { Server } from 'socket.io';
 import { GroupRepository } from './database/repositories/GroupRepository.js';
 import { TranslationCacheRepository } from './database/repositories/TranslationCacheRepository.js';
+import { FieldReportRepository } from './database/repositories/FieldReportRepository.js';
+import { ScheduleTaskRepository } from './database/repositories/ScheduleTaskRepository.js';
+import { RfiRepository } from './database/repositories/RfiRepository.js';
 import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
 import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
 import { MockTranslationProvider } from './providers/translation/MockTranslationProvider.js';
@@ -26,6 +29,9 @@ import type { IMessageRepository } from './database/repositories/IMessageReposit
 import type { IJobRepository } from './database/repositories/IJobRepository.js';
 import type { IJobApplicationRepository } from './database/repositories/IJobApplicationRepository.js';
 import type { IGroupRepository } from './database/repositories/IGroupRepository.js';
+import type { IFieldReportRepository } from './database/repositories/IFieldReportRepository.js';
+import type { IScheduleTaskRepository } from './database/repositories/IScheduleTaskRepository.js';
+import type { IRfiRepository } from './database/repositories/IRfiRepository.js';
 
 export interface AppContainer {
   db: IDatabase;
@@ -43,6 +49,9 @@ export interface AppContainer {
   translationProvider: ITranslationProvider;
   translationCacheRepository: TranslationCacheRepository;
   groupRepository: IGroupRepository;
+  fieldReportRepository: IFieldReportRepository;
+  scheduleTaskRepository: IScheduleTaskRepository;
+  rfiRepository: IRfiRepository;
 }
 
 export async function buildContainer(io?: Server): Promise<AppContainer> {
@@ -54,6 +63,9 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
   const jobRepository = new JobRepository(db);
   const jobApplicationRepository = new JobApplicationRepository(db);
   const groupRepository = new GroupRepository(db);
+  const fieldReportRepository = new FieldReportRepository(db);
+  const scheduleTaskRepository = new ScheduleTaskRepository(db);
+  const rfiRepository = new RfiRepository(db);
   const authProvider = new JWTAuthProvider(userRepository, db, config);
 
   const aiProvider: IAIProvider = config.USE_REAL_AI
@@ -97,5 +109,8 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
     translationProvider,
     translationCacheRepository,
     groupRepository,
+    fieldReportRepository,
+    scheduleTaskRepository,
+    rfiRepository,
   };
 }

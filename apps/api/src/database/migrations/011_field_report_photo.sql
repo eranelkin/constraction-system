@@ -1,0 +1,3 @@
+ALTER TABLE field_reports
+  ADD COLUMN IF NOT EXISTS photo_base64 TEXT,
+  ADD COLUMN IF NOT EXISTS photo_mime_type VARCHAR(50);

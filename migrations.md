@@ -73,7 +73,7 @@ docker exec constractor_postgres pg_dump -U constractor constractor_dev > constr
 apps/api/src/database/migrations/
 ```
 
-Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migration runner tracks which have been applied and only runs new ones — it is safe to run `db:migrate` multiple times.
+Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migration runner tracks which have been applied using the `schema_migrations` table and only runs new ones — it is safe to run `db:migrate` multiple times.
 
 ## Migration history
 
@@ -87,3 +87,6 @@ Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migratio
 | `006_groups.sql` | `groups` and `group_members` tables |
 | `007_user_is_active.sql` | Adds `is_active BOOLEAN NOT NULL DEFAULT true` to `users` |
 | `008_message_translations.sql` | `message_translations(message_id, language, translated_body)` — server-side translation cache |
+| `009_construction.sql` | `field_reports`, `schedule_tasks`, `rfis` tables + `rfi_number_seq` sequence |
+| `010_rfi_project.sql` | Adds `project VARCHAR(200)` column to `rfis` |
+| `011_field_report_photo.sql` | Adds `photo_base64 TEXT` and `photo_mime_type VARCHAR(50)` to `field_reports` |

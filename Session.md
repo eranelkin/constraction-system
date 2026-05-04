@@ -2,7 +2,7 @@
 
 > **Purpose:** Cross-machine continuity. Read this before starting any new session.
 > Update this file on demand: ask Claude to "update Session.md" after significant work.
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04 (session 2)
 
 ---
 
@@ -69,7 +69,7 @@ cp .env.example apps/api/.env                      # copy env template
 pnpm install
 pnpm --filter @constractor/types build
 pnpm --filter @constractor/config build
-pnpm --filter @constractor/api run db:migrate      # runs all 8 migrations
+pnpm --filter @constractor/api run db:migrate      # runs all 11 migrations
 ```
 
 ### Daily start
@@ -229,8 +229,50 @@ message_translations (
 Translations are computed by Groq once and stored permanently per `(message_id, language)`.
 `MessageRepository.list()` bulk-fetches cached translations for the requesting user's language and attaches `translatedBody` to each message. Zero extra Groq calls on re-entry to a chat.
 
+### Migration 009 — construction management tables
+```sql
+field_reports (
+  id UUID PK, type VARCHAR(20) CHECK('progress','issue','delay','safety'),
+  project VARCHAR(200), location VARCHAR(200), description TEXT,
+  status VARCHAR(20) DEFAULT 'open' CHECK('open','acknowledged','resolved'),
+  reported_by UUID FK users, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+)
+schedule_tasks (
+  id UUID PK, task_name VARCHAR(300), project VARCHAR(200),
+  planned_date DATE, delay_days INTEGER DEFAULT 0,
+  status VARCHAR(20) DEFAULT 'on-track' CHECK('on-track','delayed','critical','complete'),
+  reason TEXT, impact TEXT,
+  created_by UUID FK users, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+)
+CREATE SEQUENCE rfi_number_seq START 1;
+rfis (
+  id UUID PK, number INTEGER DEFAULT nextval('rfi_number_seq') UNIQUE,
+  title VARCHAR(300), description TEXT,
+  priority VARCHAR(20) DEFAULT 'medium' CHECK('low','medium','high','critical'),
+  status VARCHAR(20) DEFAULT 'open' CHECK('open','in-review','answered','closed'),
+  created_by UUID FK users, assigned_to UUID FK users (nullable),
+  due_date DATE, response TEXT, resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+)
+```
+
+### Migration 010 — RFI project column
+```sql
+ALTER TABLE rfis ADD COLUMN project VARCHAR(200);
+```
+
+### Migration 011 — field report photo
+```sql
+ALTER TABLE field_reports
+  ADD COLUMN IF NOT EXISTS photo_base64 TEXT,
+  ADD COLUMN IF NOT EXISTS photo_mime_type VARCHAR(50);
+```
+Both columns nullable — existing reports unaffected. Populated by the mobile field report screen.
+
+### Migration runner
+The runner uses a `schema_migrations` table to track which files have been applied. It is safe to run `db:migrate` multiple times — only new files are executed.
+
 Run migrations: `pnpm --filter @constractor/api run db:migrate`
-The runner is idempotent — safe to re-run.
 
 ---
 
@@ -280,6 +322,27 @@ POST /groups/:id/members                       → { group }                 (ad
 DELETE /groups/:id/members/:userId             → { group }                 (remove single member)
 PUT  /groups/user/:userId/memberships          → 204                       (set all group memberships for a user atomically)
 
+GET  /field-reports                            → { reports: FieldReportWithReporter[], total }  (all auth users)
+GET  /field-reports/:id                        → { report }
+POST /field-reports                            → { report }  (body: type, project, location, description,
+                                                              photoBase64?: string, photoMimeType?: string)
+PATCH /field-reports/:id                       → { report }  (body: status?, description?) (admin/manager)
+DELETE /field-reports/:id                      → 204          (admin only)
+
+GET  /schedule-tasks                           → { tasks: ScheduleTaskWithCreator[], total }  (admin/manager)
+GET  /schedule-tasks/:id                       → { task }
+POST /schedule-tasks                           → { task }  (body: taskName, project, plannedDate YYYY-MM-DD, delayDays, reason?)
+                                                            status auto-computed: delayDays≥5→critical, >0→delayed, 0→on-track
+PATCH /schedule-tasks/:id                      → { task }  (body: status?, delayDays?, reason?, impact?)
+DELETE /schedule-tasks/:id                     → 204
+
+GET  /rfis                                     → { rfis: RfiWithUsers[], total }  (all auth users)
+GET  /rfis/:id                                 → { rfi }
+POST /rfis                                     → { rfi }  (body: title, description, project?, priority, assignedTo? UUID, dueDate? YYYY-MM-DD)
+PATCH /rfis/:id                                → { rfi }  (body: status?, priority?, assignedTo?, dueDate?, response?) (admin/manager)
+                                                            if status→'answered'/'closed': resolvedAt stamped automatically
+DELETE /rfis/:id                               → 204  (admin only)
+
 GET  /jobs ...                                 (unchanged, see jobs module)
 GET  /my/jobs, GET /my/applications            (unchanged)
 
@@ -319,12 +382,21 @@ domain/
   Message.ts             Message { id, conversationId, senderId, senderName, body, createdAt, translatedBody? }
   Job.ts                 Job, JobApplication
   Group.ts               Group, PublicGroup, GroupMember, CreateGroupDTO, UpdateGroupDTO
+  FieldReport.ts         FieldReport, FieldReportWithReporter, FieldReportType, FieldReportStatus,
+                           CreateFieldReportDTO (includes optional photoBase64/photoMimeType),
+                           UpdateFieldReportDTO
+  ScheduleTask.ts        ScheduleTask, ScheduleTaskWithCreator, ScheduleTaskStatus,
+                           CreateScheduleTaskDTO, UpdateScheduleTaskDTO
+  Rfi.ts                 Rfi, RfiWithUsers, RfiPriority, RfiStatus, CreateRfiDTO, UpdateRfiDTO
 api/
   auth.dto.ts            ContactUser, ListUsersResponse
   users.dto.ts           ListUsersResponse, UserResponse, CreateUserRequest, UpdateUserRequest
   jobs.dto.ts            JobSummary, JobDetail, ...
   messaging.dto.ts       ConversationSummary (with unreadCount), ListMessagesResponse
   groups.dto.ts          ListGroupsResponse, GroupResponse, CreateGroupRequest, UpdateGroupRequest
+  field-reports.dto.ts   ListFieldReportsResponse, FieldReportResponse, CreateFieldReportRequest, UpdateFieldReportRequest
+  schedule-tasks.dto.ts  ListScheduleTasksResponse, ScheduleTaskResponse, CreateScheduleTaskRequest, UpdateScheduleTaskRequest
+  rfis.dto.ts            ListRfisResponse, RfiResponse, CreateRfiRequest, UpdateRfiRequest
 ```
 
 ### Key shapes
@@ -439,14 +511,48 @@ Groups = named collections of users (name + description + color + emoji). Manage
 
 ### Routes
 ```
-/manage/users     User management — full CRUD, language, avatar, group membership
-/manage/groups    Group management — full CRUD, emoji/color, member list
-/manage/tasks     Placeholder — coming soon
+/manage/dashboard   Command centre — alert strip, stat cards, activity feed, critical RFIs panel
+/manage/reports     Field reports — submit + manage, filterable table, detail panel
+/manage/schedule    Schedule & delays — task list, log delay form, detail drawer
+/manage/rfis        RFIs — create, assign, mark in-review / answered / escalate / close
+/manage/users       User management — full CRUD, language, avatar, group membership
+/manage/groups      Group management — full CRUD, emoji/color, member list
+/manage/tasks       Placeholder — coming soon
 ```
 
 ### Access control
 - Redirects to `/login` if not authenticated or if `role === 'member'`
 - Header: logo + nav tabs on left, user avatar + role badge + logout on right
+
+### Dashboard (`/manage/dashboard`) — **live API**
+- Fetches `/rfis`, `/schedule-tasks`, `/field-reports`, `/users` in parallel on load
+- Alert strip: only shown when there are actual critical RFIs / delayed tasks / open safety reports; auto-hides when all zero
+- 5 stat cards (all live): Active Projects (distinct project count across all datasets), Open RFIs, Delayed Tasks, Reports Today, Team Members
+- Activity feed: 8 most recent events merged and sorted across all three datasets client-side; relative timestamps
+- Open RFIs panel: top 4 open/in-review RFIs sorted by priority (critical → high → medium → low)
+- Quick actions bar: `+ Field Report`, `+ New RFI`, `+ Log Delay`, `View Schedule`
+
+### Field Reports (`/manage/reports`) — **live API**
+- Fetches `GET /field-reports` on load; submits `POST /field-reports`; Acknowledge/Resolve via `PATCH`
+- Type selector pill buttons (Progress / Issue / Delay / Safety)
+- Project + location dropdowns (locations dynamically filtered by project)
+- Filterable table with inline detail panel; badges use `whiteSpace: nowrap` to prevent wrapping
+- Date column: bold date + grey time in two-line stacked cell
+
+### Schedule (`/manage/schedule`) — **live API**
+- Fetches `GET /schedule-tasks` on load; `+ Log Delay` form posts `POST /schedule-tasks`
+- Acknowledge (critical → delayed) via `PATCH /schedule-tasks/:id { status: 'delayed' }`
+- Status values: `'on-track'` | `'delayed'` | `'critical'` | `'complete'` (NOT `'completed'`)
+- `plannedDate` stored as `YYYY-MM-DD`, formatted for display via `formatPlannedDate()`
+- Detail drawer: delay reason (yellow box), schedule impact (red box), Acknowledge / Create RFI / Notify Team
+
+### RFIs (`/manage/rfis`) — **live API**
+- Fetches `GET /rfis` + `GET /users` in parallel on load (users needed for assignee dropdown)
+- Creates via `POST /rfis`; status/priority changes via `PATCH /rfis/:id`
+- Due date is a native `<input type="date">` picker (YYYY-MM-DD) — not relative strings
+- Assignee dropdown uses real user UUIDs from `/users`
+- Resolving sets `resolved_at` automatically server-side
+- `dueDate` displayed as relative label (Today / Tomorrow / +N days / N days overdue)
 
 ### User form
 - Fields: display name, email, password (create only), role, language (14 options), avatar upload (jpg/png/webp/gif, max 2MB)
@@ -466,7 +572,12 @@ Groups = named collections of users (name + description + color + emoji). Manage
 (root index)  → (auth)/login  → (home)/index  ← main hub
               → (auth)/register → (home)/index
 (home)/index  → (messages)/[id]   chat screen
+(home)/index  → report-new        field report modal (FAB → "New Report")
 ```
+
+### Root layout (`_layout.tsx`)
+Uses `<Slot>` (unchanged). Expo Router manages the navigation stack internally — `router.push` / `router.back()` work as expected.
+Do NOT change this to `<Stack>` — on Android, switching to a native Stack navigator causes `java.lang.String cannot be cast to java.lang.Boolean` crashes at startup due to native prop type mismatches in Expo Router v6.
 
 ### Login screen DEV panel (`__DEV__` only)
 - Quick-login buttons: 👷 Hebrew (`member1@test.com`), 👷 English (`member2@test.com`), 👔 Manager 1 (`manager1@test.com`) — all password `Test1234!`
@@ -479,6 +590,11 @@ Groups = named collections of users (name + description + color + emoji). Manage
   - Section: **🏘️ Groups** — group cards with emoji/color badge, name, member count, description
   - Green unread badge on cards with count, capped at 99+
 - **Tasks tab:** "Coming Soon" 🚧
+- **Floating `+` FAB** (bottom-right, absolute positioned, orange #FF6B2B, neobrutalist shadow)
+  - Tap → action sheet modal (bottom sheet via React Native `Modal`):
+    - **📋 New Report** → `router.push('/report-new')` (modal presentation)
+    - **✅ New Task** → `Alert.alert('Coming soon')` (greyed out, visible)
+    - Cancel
 - **Badge refresh strategy:**
   - `useFocusEffect` (300ms delay on return from other screens, 0ms on first mount) reloads all data
   - Socket `conversation_updated` listener re-registered on every focus for real-time badge updates
@@ -505,6 +621,26 @@ Groups = named collections of users (name + description + color + emoji). Manage
 - **Voice:** record (expo-av) → Groq Whisper transcribe → edit → send.
 - **Input bar:** text input + send ➤ / voice 🎙️ toggle.
 
+### Field Report screen (`report-new.tsx`) ✅
+Goal: submit a field report in under 10 seconds. Single scrollable form — no step wizard.
+
+**Flow:**
+1. Tap FAB `+` on home screen → tap **New Report** in action sheet
+2. Tap photo box → `ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 })` → thumbnail shown
+3. Hold mic button → `Audio.Recording` → release → `POST /speech/transcribe` → description auto-populated
+4. Description editable; choose Type chip (Progress/Issue/Delay/Safety), Project chip, type Location
+5. Tap **Submit Report** → `POST /field-reports` → `router.back()`
+
+**Package:** `expo-image-picker ~17.0.11` (SDK 54 compatible). Permissions declared in `app.json` plugin.
+
+**Voice reuse:** Exact same `expo-av` + `/speech/transcribe` pattern from `(messages)/[id].tsx`. No new audio packages.
+
+**Photo storage:** base64-encoded in `field_reports.photo_base64` + mime type in `photo_mime_type`. Both nullable — old reports and web-submitted reports have null.
+
+**Projects list (hardcoded, matches web):** `['Downtown Tower', 'Harbor Bridge', 'Riverside Complex', 'Metro Station']`
+
+**User ID for `reportedBy`:** fetched via `getStoredUser()` from `expo-secure-store` (same as home screen).
+
 ### Socket module (`apps/mobile/src/lib/socket.ts`)
 Module-level singleton `socket`. `connectSocket(token)` returns existing if `socket.connected`, else creates new `io()`. `getSocket()` returns current instance or null. Shared between home and chat screens.
 
@@ -515,24 +651,32 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 
 ## 14. Pending / Next Steps
 
-1. **Tasks module** — main next priority
-   - DB migration: `tasks` table with `job_id`, `assigned_to`, `title`, `status`, `priority`, `due_date`
-   - API: `GET/POST /jobs/:id/tasks`, `PATCH /tasks/:id`, `DELETE /tasks/:id`
-   - Web `/manage/tasks`: manager creates/assigns tasks
-   - Mobile Tasks tab: worker sees their assigned tasks as status cards
+1. **Mobile deployment (deferred)**
+   - EAS Build setup (`eas.json` created, `mobile.md` has full guide)
+   - Requires stable public HTTPS URL for `EXPO_PUBLIC_API_URL` before building
+   - Railway (or similar) for API hosting
 
-2. **Push notifications** — Expo Notifications for new messages and task assignments
+2. **Notifications + assignments**
+   - Acknowledge flow in Field Reports will trigger notification to reporter
+   - RFI assignment notification to assignee
+   - Requires Expo Notifications setup
 
-3. **Web: token auto-refresh** — `api-client.ts` has no refresh logic; after 15 min, API calls return 401 silently
+3. **Mobile — RFIs (future)**
+   - Field workers can view and respond to RFIs on mobile
+   - Similar flow to field report screen
 
-4. **Socket reconnect on foreground** — no `AppState` listener exists; if app is backgrounded and socket disconnects, messages may be missed until the screen is re-mounted
+4. **Mobile Tasks tab** — currently "Coming Soon"; backed by `schedule_tasks` table already exists
+
+5. **Web: token auto-refresh** — `api-client.ts` has refresh logic (`attemptRefresh` on 401) but not pre-emptive; token expires silently if tab is idle >15 min without an API call
+
+6. **Socket reconnect on foreground** — no `AppState` listener exists; if app is backgrounded and socket disconnects, messages may be missed until the chat screen is re-mounted
 
 ---
 
 ## 15. Outstanding Bugs / Known Issues
 
-1. **Web: access token expiry** — no auto-refresh. After 15 min, API calls return 401 silently.
-2. **Web: jobs/dashboard pages** — `/jobs`, `/dashboard`, etc. still use plain styles, not comic design.
+1. **Web: access token expiry** — `api-client.ts` will retry with a refresh token on 401, but there is no pre-emptive refresh. If a tab sits idle past 15 min and then makes a call, the first request fails with 401 before the retry fires — may cause a flash of error UI.
+2. **Web: jobs/dashboard pages** — `/jobs`, `/dashboard` (the non-manage one), etc. still use plain styles, not comic design.
 3. **Socket reconnect on app foreground** — no `AppState` listener. If a device is backgrounded and the socket drops, messages sent while backgrounded won't appear in real-time until the chat screen is re-mounted. Workaround: kill and reopen the app (auto-login restores session and REST fetch catches up).
 
 ---
@@ -560,21 +704,33 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 | Conversation repository | `apps/api/src/database/repositories/ConversationRepository.ts` |
 | Message repository | `apps/api/src/database/repositories/MessageRepository.ts` |
 | Translation cache repository | `apps/api/src/database/repositories/TranslationCacheRepository.ts` |
+| Field report repository | `apps/api/src/database/repositories/FieldReportRepository.ts` |
+| Schedule task repository | `apps/api/src/database/repositories/ScheduleTaskRepository.ts` |
+| RFI repository | `apps/api/src/database/repositories/RfiRepository.ts` |
 | Groups router | `apps/api/src/modules/groups/groups.router.ts` |
 | Messaging router | `apps/api/src/modules/messaging/messaging.router.ts` |
 | Translate router | `apps/api/src/modules/translate/translate.router.ts` |
 | Dev router | `apps/api/src/modules/dev/dev.router.ts` |
+| Field reports router | `apps/api/src/modules/field-reports/field-reports.router.ts` |
+| Schedule tasks router | `apps/api/src/modules/schedule-tasks/schedule-tasks.router.ts` |
+| RFIs router | `apps/api/src/modules/rfis/rfis.router.ts` |
 | Speech provider (Groq) | `apps/api/src/providers/speech/GroqSpeechProvider.ts` |
 | Translation provider (Groq) | `apps/api/src/providers/translation/GroqTranslationProvider.ts` |
 | Socket.IO provider | `apps/api/src/providers/realtime/SocketIOProvider.ts` |
 | Shared types | `packages/types/src/` |
 | Web globals.css | `apps/web/src/app/globals.css` |
 | Web manage layout | `apps/web/src/app/manage/layout.tsx` |
+| Web dashboard page | `apps/web/src/app/manage/dashboard/page.tsx` |
+| Web reports page | `apps/web/src/app/manage/reports/page.tsx` |
+| Web schedule page | `apps/web/src/app/manage/schedule/page.tsx` |
+| Web RFIs page | `apps/web/src/app/manage/rfis/page.tsx` |
 | Web users page | `apps/web/src/app/manage/users/page.tsx` |
 | Web groups page | `apps/web/src/app/manage/groups/page.tsx` |
 | Web session utils | `apps/web/src/lib/auth/session.ts` |
 | Web API client | `apps/web/src/lib/api-client.ts` |
+| Mobile root layout | `apps/mobile/src/app/_layout.tsx` |
 | Mobile home screen | `apps/mobile/src/app/(home)/index.tsx` |
+| Mobile field report screen | `apps/mobile/src/app/report-new.tsx` |
 | Mobile chat screen | `apps/mobile/src/app/(messages)/[id].tsx` |
 | Mobile login screen | `apps/mobile/src/app/(auth)/login.tsx` |
 | Mobile socket module | `apps/mobile/src/lib/socket.ts` |

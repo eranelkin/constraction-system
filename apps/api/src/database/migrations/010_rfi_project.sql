@@ -1,0 +1,1 @@
+ALTER TABLE rfis ADD COLUMN project VARCHAR(200);
