@@ -84,6 +84,19 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
 
           {/* Tabs */}
           <nav style={{ display: 'flex', gap: '0.25rem' }}>
+          <Link href="/manage/dashboard" style={{
+            padding: '0.4rem 1.2rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            textDecoration: 'none',
+            background: pathname.startsWith('/manage/dashboard') ? 'var(--orange)' : 'transparent',
+            color: pathname.startsWith('/manage/dashboard') ? '#fff' : 'rgba(255,255,255,0.65)',
+            border: pathname.startsWith('/manage/dashboard') ? 'var(--border)' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            📊 Dashboard
+          </Link>
           <Link href="/manage/users" style={{
             padding: '0.4rem 1.2rem',
             borderRadius: 'var(--radius-pill)',

@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "scheme": "constractor",
     "userInterfaceStyle": "automatic",
+    "icon": "./src/assets/icon.png",
+    "splash": {
+      "image": "./src/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FF6B2B"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.constractor.app"
@@ -13,7 +19,8 @@
     "android": {
       "package": "com.constractor.app",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./src/assets/icon.png",
+        "backgroundColor": "#FF6B2B"
       }
     },
     "plugins": [
