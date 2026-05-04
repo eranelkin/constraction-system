@@ -29,6 +29,13 @@
       [
         "expo-av",
         { "microphonePermission": "Allow Constractor to record voice messages." }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Constractor to access photos for field reports.",
+          "cameraPermission": "Allow Constractor to take photos for field reports."
+        }
       ]
     ],
     "experiments": {

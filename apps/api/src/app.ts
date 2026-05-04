@@ -10,6 +10,9 @@ import { createUsersRouter } from './modules/users/users.router.js';
 import { createSpeechRouter } from './modules/speech/speech.router.js';
 import { createTranslateRouter } from './modules/translate/translate.router.js';
 import { createGroupsRouter } from './modules/groups/groups.router.js';
+import { createFieldReportsRouter } from './modules/field-reports/field-reports.router.js';
+import { createScheduleTasksRouter } from './modules/schedule-tasks/schedule-tasks.router.js';
+import { createRfisRouter } from './modules/rfis/rfis.router.js';
 import { createDevRouter } from './modules/dev/dev.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
@@ -35,6 +38,9 @@ export function createApp(container: AppContainer): Express {
   app.use('/speech', createSpeechRouter(container));
   app.use('/translate', createTranslateRouter(container));
   app.use('/groups', createGroupsRouter(container));
+  app.use('/field-reports', createFieldReportsRouter(container));
+  app.use('/schedule-tasks', createScheduleTasksRouter(container));
+  app.use('/rfis', createRfisRouter(container));
 
   if (config.NODE_ENV !== 'production') {
     app.use('/dev', createDevRouter(container));

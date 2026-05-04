@@ -10,6 +10,8 @@ import {
   Alert,
   StatusBar,
   Image,
+  Modal,
+  TouchableOpacity,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import {
@@ -142,6 +144,7 @@ type ListItem =
 
 export default function HomeScreen() {
   const [tab, setTab] = useState<Tab>("msg");
+  const [fabOpen, setFabOpen] = useState(false);
   const [users, setUsers] = useState<ContactUser[]>([]);
   const [groups, setGroups] = useState<PublicGroup[]>([]);
   const [contactUnread, setContactUnread] = useState<Map<string, number>>(
@@ -500,6 +503,62 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
+      {/* FAB */}
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        onPress={() => setFabOpen(true)}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
+
+      {/* Action sheet */}
+      <Modal
+        visible={fabOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFabOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setFabOpen(false)}
+        />
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <Pressable
+            style={styles.sheetItem}
+            onPress={() => {
+              setFabOpen(false);
+              router.push('/report-new' as never);
+            }}
+          >
+            <Text style={styles.sheetItemEmoji}>📋</Text>
+            <View>
+              <Text style={styles.sheetItemTitle}>New Report</Text>
+              <Text style={styles.sheetItemSub}>Field progress, issue, delay or safety</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            style={[styles.sheetItem, styles.sheetItemDisabled]}
+            onPress={() => {
+              setFabOpen(false);
+              Alert.alert('Coming soon', 'Task creation is coming in a future update.');
+            }}
+          >
+            <Text style={styles.sheetItemEmoji}>✅</Text>
+            <View>
+              <Text style={[styles.sheetItemTitle, { color: '#aaa' }]}>New Task</Text>
+              <Text style={styles.sheetItemSub}>Coming soon</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            style={styles.sheetCancel}
+            onPress={() => setFabOpen(false)}
+          >
+            <Text style={styles.sheetCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -727,5 +786,105 @@ const styles = StyleSheet.create({
     fontSize: ms(15),
     fontWeight: "600",
     color: "#888",
+  },
+  fab: {
+    position: "absolute",
+    bottom: ms(28),
+    right: ms(20),
+    width: s(56),
+    height: s(56),
+    borderRadius: s(28),
+    backgroundColor: "#FF6B2B",
+    borderWidth: 2.5,
+    borderColor: "#1C1C2E",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#1C1C2E",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+  fabPressed: {
+    shadowOffset: { width: 2, height: 2 },
+    transform: [{ translateX: 2 }, { translateY: 2 }],
+  },
+  fabText: {
+    fontSize: ms(28),
+    fontWeight: "900",
+    color: "#FFFFFF",
+    lineHeight: ms(32),
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  sheet: {
+    backgroundColor: "#FFF9E6",
+    borderTopLeftRadius: ms(20),
+    borderTopRightRadius: ms(20),
+    borderWidth: 2.5,
+    borderBottomWidth: 0,
+    borderColor: "#1C1C2E",
+    paddingBottom: vs(24),
+    paddingHorizontal: ms(16),
+    paddingTop: ms(12),
+  },
+  sheetHandle: {
+    width: ms(40),
+    height: ms(5),
+    borderRadius: 99,
+    backgroundColor: "#ccc",
+    alignSelf: "center",
+    marginBottom: ms(16),
+  },
+  sheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ms(14),
+    paddingVertical: ms(14),
+    paddingHorizontal: ms(8),
+    borderRadius: ms(12),
+    borderWidth: 2.5,
+    borderColor: "#1C1C2E",
+    backgroundColor: "#FFFFFF",
+    marginBottom: ms(10),
+    shadowColor: "#1C1C2E",
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
+  },
+  sheetItemDisabled: {
+    backgroundColor: "#F5F5F5",
+    shadowOpacity: 0.3,
+  },
+  sheetItemEmoji: {
+    fontSize: ms(28),
+  },
+  sheetItemTitle: {
+    fontSize: ms(16),
+    fontWeight: "800",
+    color: "#1C1C2E",
+  },
+  sheetItemSub: {
+    fontSize: ms(12),
+    fontWeight: "500",
+    color: "#888",
+    marginTop: ms(2),
+  },
+  sheetCancel: {
+    paddingVertical: ms(14),
+    alignItems: "center",
+    borderRadius: ms(12),
+    borderWidth: 2.5,
+    borderColor: "#1C1C2E",
+    backgroundColor: "#FFFFFF",
+    marginTop: ms(4),
+  },
+  sheetCancelText: {
+    fontSize: ms(16),
+    fontWeight: "800",
+    color: "#1C1C2E",
   },
 });

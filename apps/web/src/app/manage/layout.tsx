@@ -97,6 +97,45 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
           }}>
             📊 Dashboard
           </Link>
+          <Link href="/manage/reports" style={{
+            padding: '0.4rem 1.2rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            textDecoration: 'none',
+            background: pathname.startsWith('/manage/reports') ? 'var(--orange)' : 'transparent',
+            color: pathname.startsWith('/manage/reports') ? '#fff' : 'rgba(255,255,255,0.65)',
+            border: pathname.startsWith('/manage/reports') ? 'var(--border)' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            📋 Reports
+          </Link>
+          <Link href="/manage/schedule" style={{
+            padding: '0.4rem 1.2rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            textDecoration: 'none',
+            background: pathname.startsWith('/manage/schedule') ? 'var(--orange)' : 'transparent',
+            color: pathname.startsWith('/manage/schedule') ? '#fff' : 'rgba(255,255,255,0.65)',
+            border: pathname.startsWith('/manage/schedule') ? 'var(--border)' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            📅 Schedule
+          </Link>
+          <Link href="/manage/rfis" style={{
+            padding: '0.4rem 1.2rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            textDecoration: 'none',
+            background: pathname.startsWith('/manage/rfis') ? 'var(--orange)' : 'transparent',
+            color: pathname.startsWith('/manage/rfis') ? '#fff' : 'rgba(255,255,255,0.65)',
+            border: pathname.startsWith('/manage/rfis') ? 'var(--border)' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            📄 RFIs
+          </Link>
           <Link href="/manage/users" style={{
             padding: '0.4rem 1.2rem',
             borderRadius: 'var(--radius-pill)',
