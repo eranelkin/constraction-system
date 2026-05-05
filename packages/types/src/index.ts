@@ -14,3 +14,5 @@ export type * from './domain/ScheduleTask.js';
 export type * from './api/schedule-tasks.dto.js';
 export type * from './domain/Rfi.js';
 export type * from './api/rfis.dto.js';
+export type * from './domain/MediaFile.js';
+export type * from './domain/Settings.js';

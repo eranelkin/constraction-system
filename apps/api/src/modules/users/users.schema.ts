@@ -18,4 +18,6 @@ export const updateUserSchema = z.object({
   language:      z.string().max(10).optional(),
   avatar:        z.string().nullable().optional(), // base64 | null to clear | omit to keep
   avatarMimeType:z.string().optional(),
+  canSendVoice:  z.boolean().optional(),
+  canSendVideo:  z.boolean().optional(),
 });

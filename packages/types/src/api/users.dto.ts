@@ -22,4 +22,6 @@ export interface UpdateUserRequest {
   language?: string;
   avatar?: string | null; // base64 to set, null to clear, omit to keep
   avatarMimeType?: string;
+  canSendVoice?: boolean;
+  canSendVideo?: boolean;
 }

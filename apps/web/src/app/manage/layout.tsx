@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { getStoredUser, clearSession } from '@/lib/auth/session';
@@ -44,6 +44,8 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -53,6 +55,16 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
     }
     setUser(stored);
   }, [router]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [menuOpen]);
 
   function handleLogout() {
     clearSession();
@@ -204,6 +216,65 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
           >
             Logout
           </button>
+          {user.role === 'admin' && (
+            <div ref={menuRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  padding: '0.2rem',
+                  opacity: (pathname.startsWith('/manage/settings') || pathname.startsWith('/manage/media')) ? 1 : 0.6,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                ⚙️
+              </button>
+              {menuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  background: '#fff',
+                  border: 'var(--border)',
+                  boxShadow: 'var(--shadow-md)',
+                  borderRadius: 'var(--radius-sm)',
+                  minWidth: 180,
+                  zIndex: 100,
+                  overflow: 'hidden',
+                }}>
+                  {[
+                    { label: '⚙️ Video Settings', path: '/manage/settings' },
+                    { label: '🎞️ Media Files', path: '/manage/media' },
+                  ].map(({ label, path }) => (
+                    <button
+                      key={path}
+                      onClick={() => { router.push(path); setMenuOpen(false); }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '0.65rem 1rem',
+                        background: pathname.startsWith(path) ? 'rgba(255,107,43,0.08)' : 'transparent',
+                        border: 'none',
+                        borderBottom: '1px solid rgba(0,0,0,0.06)',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        color: 'var(--navy)',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,107,43,0.1)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = pathname.startsWith(path) ? 'rgba(255,107,43,0.08)' : 'transparent')}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 

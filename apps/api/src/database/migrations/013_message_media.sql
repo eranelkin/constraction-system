@@ -1,0 +1,3 @@
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS audio_url TEXT,
+  ADD COLUMN IF NOT EXISTS video_url TEXT;

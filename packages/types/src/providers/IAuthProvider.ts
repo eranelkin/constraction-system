@@ -18,6 +18,8 @@ export interface AuthUser {
   displayName: string;
   language: string;
   emailVerified: boolean;
+  canSendVoice: boolean;
+  canSendVideo: boolean;
 }
 
 export interface SignUpPayload extends AuthCredentials {

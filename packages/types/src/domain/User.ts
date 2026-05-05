@@ -9,6 +9,8 @@ export interface User {
   language: string;
   emailVerified: boolean;
   isActive: boolean;
+  canSendVoice: boolean;
+  canSendVideo: boolean;
   createdAt: Date;
 }
 
@@ -20,6 +22,8 @@ export interface PublicUser {
   language: string;
   emailVerified: boolean;
   isActive: boolean;
+  canSendVoice: boolean;
+  canSendVideo: boolean;
   createdAt: Date;
   hasAvatar: boolean;
 }
@@ -42,6 +46,8 @@ export type UpdateUserDTO = {
   language?: string;
   emailVerified?: boolean;
   isActive?: boolean;
+  canSendVoice?: boolean;
+  canSendVideo?: boolean;
   avatarData?: Buffer | null;
   avatarMimeType?: string | null;
 };

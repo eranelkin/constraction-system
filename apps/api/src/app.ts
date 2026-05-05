@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import cors from 'cors';
+import path from 'node:path';
 import { config } from '@constractor/config';
 import type { AppContainer } from './container.js';
 import { createAuthRouter } from './modules/auth/auth.router.js';
@@ -13,6 +14,8 @@ import { createGroupsRouter } from './modules/groups/groups.router.js';
 import { createFieldReportsRouter } from './modules/field-reports/field-reports.router.js';
 import { createScheduleTasksRouter } from './modules/schedule-tasks/schedule-tasks.router.js';
 import { createRfisRouter } from './modules/rfis/rfis.router.js';
+import { createMediaRouter } from './modules/media/media.router.js';
+import { createSettingsRouter } from './modules/settings/settings.router.js';
 import { createDevRouter } from './modules/dev/dev.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
@@ -21,6 +24,9 @@ export function createApp(container: AppContainer): Express {
 
   app.use(cors({ origin: config.CORS_ORIGINS, credentials: true }));
   app.use(express.json({ limit: '15mb' }));
+
+  // Serve uploaded media files without auth (private LAN app)
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -41,6 +47,8 @@ export function createApp(container: AppContainer): Express {
   app.use('/field-reports', createFieldReportsRouter(container));
   app.use('/schedule-tasks', createScheduleTasksRouter(container));
   app.use('/rfis', createRfisRouter(container));
+  app.use('/media', createMediaRouter(container));
+  app.use('/settings', createSettingsRouter(container));
 
   if (config.NODE_ENV !== 'production') {
     app.use('/dev', createDevRouter(container));

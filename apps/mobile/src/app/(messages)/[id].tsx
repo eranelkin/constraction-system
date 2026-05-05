@@ -20,6 +20,7 @@ import {
 import { ms, s, vs } from '../../lib/responsive';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+const resolveMediaUrl = (url: string) => url.startsWith('/') ? `${API_URL}${url}` : url;
 const SENDER_COLORS = ['#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#FF9FF3', '#54A0FF', '#FFD93D', '#FF6B2B'];
 const AVATAR_SIZE_HEADER = s(38);
 const AVATAR_SIZE_BUBBLE = s(30);
@@ -47,11 +48,13 @@ function UserAvatar({ userId, fallbackEmoji, fallbackColor, size }: {
   );
 }
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
-import { Audio } from 'expo-av';
-import { apiRequest } from '../../lib/api-client';
+import { Audio, Video, ResizeMode } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
+import { apiRequest, uploadFile } from '../../lib/api-client';
+import { VideoRecorderModal } from './VideoRecorderModal';
 import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
 import { connectSocket, getSocket } from '../../lib/socket';
-import type { ListMessagesResponse, Message } from '@constractor/types';
+import type { ListMessagesResponse, Message, PlatformSettings } from '@constractor/types';
 import * as FileSystem from 'expo-file-system';
 
 type VoicePhase = 'recording' | 'transcribing' | 'editing';
@@ -115,6 +118,23 @@ export default function ThreadScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Voice message state
+  const [vmPhase, setVmPhase] = useState<'recording' | 'uploading' | null>(null);
+  const [vmSecs, setVmSecs] = useState(0);
+  const vmRecordingRef = useRef<Audio.Recording | null>(null);
+  const vmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Permissions + settings
+  const [canSendVoice, setCanSendVoice] = useState(false);
+  const [canSendVideo, setCanSendVideo] = useState(false);
+  const [videoMaxDuration, setVideoMaxDuration] = useState(12);
+  const [videoQuality, setVideoQuality] = useState(0.4);
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
+
+  // Audio playback for received voice messages
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const playbackRef = useRef<Audio.Sound | null>(null);
+
   const lastIdRef = useRef<string | undefined>(undefined);
   const oldestIdRef = useRef<string | undefined>(undefined);
   const flatListRef = useRef<FlatList<FlatItem>>(null);
@@ -157,8 +177,19 @@ export default function ThreadScreen() {
       setUserLanguage(lang);
       userIdRef.current = uid;
       userLanguageRef.current = lang;
+
+      const u = user as { canSendVoice?: boolean; canSendVideo?: boolean } | null;
+      if (u?.canSendVoice) setCanSendVoice(true);
+      if (u?.canSendVideo) setCanSendVideo(true);
+
+      try {
+        const token = await fetchToken();
+        const s = await apiRequest<PlatformSettings>('/settings', { token });
+        setVideoMaxDuration(s.videoMaxDurationSeconds);
+        setVideoQuality(s.videoQuality);
+      } catch { /* use defaults */ }
     })();
-  }, []);
+  }, [fetchToken]);
 
   // Preload notification sound once on mount
   useEffect(() => {
@@ -407,6 +438,118 @@ export default function ThreadScreen() {
     }
   }
 
+  // ── Voice message (audio send — no transcription) ───────────────────────
+
+  async function startVoiceMsg() {
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permission denied', 'Microphone access is needed to send voice messages.');
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      vmRecordingRef.current = recording;
+      setVmSecs(0);
+      setVmPhase('recording');
+      vmTimerRef.current = setInterval(() => setVmSecs((x) => x + 1), 1000);
+    } catch {
+      Alert.alert('Error', 'Could not start recording');
+    }
+  }
+
+  async function stopAndSendVoiceMsg() {
+    if (vmTimerRef.current) { clearInterval(vmTimerRef.current); vmTimerRef.current = null; }
+    const recording = vmRecordingRef.current;
+    if (!recording) return;
+    setVmPhase('uploading');
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      vmRecordingRef.current = null;
+      const uri = recording.getURI();
+      if (!uri) throw new Error('No audio URI');
+      const token = (await fetchToken()) ?? '';
+      const { url } = await uploadFile(uri, 'audio/m4a', token);
+      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+        method: 'POST',
+        body: { body: '', audioUrl: url },
+        token,
+      });
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not send voice message');
+    } finally {
+      setVmPhase(null);
+      setVmSecs(0);
+    }
+  }
+
+  async function cancelVoiceMsg() {
+    if (vmTimerRef.current) { clearInterval(vmTimerRef.current); vmTimerRef.current = null; }
+    const recording = vmRecordingRef.current;
+    if (recording) {
+      try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
+      vmRecordingRef.current = null;
+    }
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    setVmPhase(null);
+    setVmSecs(0);
+  }
+
+  // ── Video message ─────────────────────────────────────────────────────────
+
+  async function handleVideoRecorded(uri: string) {
+    setShowVideoRecorder(false);
+    setVmPhase('uploading');
+    try {
+      const token = (await fetchToken()) ?? '';
+      const { url } = await uploadFile(uri, 'video/mp4', token);
+      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+        method: 'POST',
+        body: { body: '', videoUrl: url },
+        token,
+      });
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not send video message');
+    } finally {
+      setVmPhase(null);
+    }
+  }
+
+  // ── Audio playback for voice message bubbles ──────────────────────────────
+
+  async function toggleAudioPlay(msgId: string, audioUrl: string) {
+    if (playingId === msgId) {
+      await playbackRef.current?.stopAsync();
+      await playbackRef.current?.unloadAsync();
+      playbackRef.current = null;
+      setPlayingId(null);
+      return;
+    }
+    if (playbackRef.current) {
+      await playbackRef.current.stopAsync();
+      await playbackRef.current.unloadAsync();
+      playbackRef.current = null;
+    }
+    setPlayingId(msgId);
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true });
+      playbackRef.current = sound;
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded || status.didJustFinish) {
+          setPlayingId(null);
+          void sound.unloadAsync();
+          playbackRef.current = null;
+        }
+      });
+    } catch {
+      setPlayingId(null);
+    }
+  }
+
   function playMessageSound() {
     if (voicePhase !== null) return;
     void soundRef.current?.replayAsync().catch(() => {});
@@ -511,12 +654,34 @@ export default function ThreadScreen() {
           <View style={styles.bubbleWrapper}>
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
               {!isMe && <Text style={styles.senderName}>{msg.senderName}</Text>}
-              {!isMe && isTranslating && !translated
-                ? <ActivityIndicator size={12} color="#888" style={{ alignSelf: 'flex-start' }} />
-                : <Text style={isMe ? styles.bubbleMeText : styles.bubbleThemText}>
-                    {(!isMe && translated) ? translated : msg.body}
+
+              {msg.audioUrl ? (
+                <Pressable
+                  style={styles.audioBubble}
+                  onPress={() => void toggleAudioPlay(msg.id, resolveMediaUrl(msg.audioUrl!))}
+                >
+                  <Text style={styles.audioBubbleIcon}>
+                    {playingId === msg.id ? '⏹' : '▶'}
                   </Text>
-              }
+                  <Text style={[styles.audioBubbleLabel, isMe ? styles.bubbleMeText : styles.bubbleThemText]}>
+                    {playingId === msg.id ? 'Playing…' : '🎵 Voice message'}
+                  </Text>
+                </Pressable>
+              ) : msg.videoUrl ? (
+                <Video
+                  source={{ uri: resolveMediaUrl(msg.videoUrl) }}
+                  useNativeControls
+                  resizeMode={ResizeMode.COVER}
+                  style={styles.videoBubble}
+                />
+              ) : (
+                !isMe && isTranslating && !translated
+                  ? <ActivityIndicator size={12} color="#888" style={{ alignSelf: 'flex-start' }} />
+                  : <Text style={isMe ? styles.bubbleMeText : styles.bubbleThemText}>
+                      {(!isMe && translated) ? translated : msg.body}
+                    </Text>
+              )}
+
               <Text style={[styles.timeText, isMe ? styles.timeTextMe : styles.timeTextThem]}>
                 {formatTime(msg.createdAt)}
               </Text>
@@ -577,6 +742,24 @@ export default function ThreadScreen() {
 
         {/* Input bar */}
         <View style={styles.inputRow}>
+          {/* Media buttons (left side) */}
+          {canSendVoice && (
+            <Pressable
+              style={({ pressed }) => [styles.actionBtn, styles.voiceMsgBtn, pressed && styles.btnPressed]}
+              onPress={() => void startVoiceMsg()}
+            >
+              <Text style={styles.actionBtnText}>🎵</Text>
+            </Pressable>
+          )}
+          {canSendVideo && (
+            <Pressable
+              style={({ pressed }) => [styles.actionBtn, styles.videoMsgBtn, pressed && styles.btnPressed]}
+              onPress={() => setShowVideoRecorder(true)}
+            >
+              <Text style={styles.actionBtnText}>📹</Text>
+            </Pressable>
+          )}
+
           <TextInput
             style={styles.input}
             value={input}
@@ -605,6 +788,38 @@ export default function ThreadScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Voice Message Modal ─────────────────────────────────────────── */}
+      <Modal visible={vmPhase !== null} transparent animationType="fade" onRequestClose={() => void cancelVoiceMsg()}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {vmPhase === 'recording' ? (
+              <>
+                <View style={styles.pulseRing}>
+                  <View style={[styles.pulseCore, { backgroundColor: '#4ECDC4' }]}>
+                    <Text style={styles.modalMicEmoji}>🎵</Text>
+                  </View>
+                </View>
+                <Text style={styles.recordingTimer}>{formatDuration(vmSecs)}</Text>
+                <Text style={styles.recordingHint}>Voice message recording</Text>
+                <View style={{ flexDirection: 'row', gap: ms(16), marginTop: ms(8) }}>
+                  <Pressable style={[styles.circleBtn, styles.cancelBtn]} onPress={() => void cancelVoiceMsg()}>
+                    <Text style={styles.circleBtnText}>✕</Text>
+                  </Pressable>
+                  <Pressable style={[styles.circleBtn, styles.voiceSendBtn]} onPress={() => void stopAndSendVoiceMsg()}>
+                    <Text style={styles.circleBtnText}>➤</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator size="large" color="#4ECDC4" />
+                <Text style={styles.transcribingText}>Sending voice message…</Text>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Voice Modal ─────────────────────────────────────────────────── */}
       <Modal visible={voicePhase !== null} transparent animationType="fade" onRequestClose={() => void cancelVoice()}>
@@ -687,6 +902,13 @@ export default function ThreadScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <VideoRecorderModal
+        visible={showVideoRecorder}
+        maxDuration={videoMaxDuration}
+        onClose={() => setShowVideoRecorder(false)}
+        onRecorded={(uri) => void handleVideoRecorded(uri)}
+      />
     </SafeAreaView>
   );
 }
@@ -932,5 +1154,27 @@ const styles = StyleSheet.create({
     minHeight: vs(100),
     textAlignVertical: 'top',
     lineHeight: ms(24),
+  },
+
+  // Media message buttons
+  voiceMsgBtn: { backgroundColor: '#4ECDC4' },
+  videoMsgBtn: { backgroundColor: '#A29BFE' },
+
+  // Audio bubble
+  audioBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    paddingVertical: ms(4),
+  },
+  audioBubbleIcon: { fontSize: ms(22) },
+  audioBubbleLabel: { fontWeight: '600' },
+
+  // Video bubble
+  videoBubble: {
+    width: s(220),
+    height: s(160),
+    borderRadius: ms(8),
+    overflow: 'hidden',
   },
 });

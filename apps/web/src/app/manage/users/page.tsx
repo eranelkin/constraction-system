@@ -49,11 +49,14 @@ interface UserFormData {
   avatarFile: File | null;
   deleteAvatar: boolean;
   groupIds: string[];
+  canSendVoice: boolean;
+  canSendVideo: boolean;
 }
 
 const EMPTY_FORM: UserFormData = {
   displayName: '', email: '', password: '', role: 'member', language: 'en',
   avatarFile: null, deleteAvatar: false, groupIds: [],
+  canSendVoice: false, canSendVideo: false,
 };
 
 function avatarUrl(userId: string, bust: number) {
@@ -120,7 +123,7 @@ export default function UsersPage() {
     setFormMode('edit');
     setEditTarget(user);
     const userGroupIds = groups.filter((g) => g.members.some((m) => m.userId === user.id)).map((g) => g.id);
-    setForm({ displayName: user.displayName, email: user.email, password: '', role: user.role, language: user.language, avatarFile: null, deleteAvatar: false, groupIds: userGroupIds });
+    setForm({ displayName: user.displayName, email: user.email, password: '', role: user.role, language: user.language, avatarFile: null, deleteAvatar: false, groupIds: userGroupIds, canSendVoice: user.canSendVoice, canSendVideo: user.canSendVideo });
     setAvatarPreview(null);
     setFormError(null);
   }
@@ -192,6 +195,8 @@ export default function UsersPage() {
           body.avatar = await fileToBase64(form.avatarFile);
           body.avatarMimeType = form.avatarFile.type;
         }
+        body.canSendVoice = form.canSendVoice;
+        body.canSendVideo = form.canSendVideo;
         await apiRequest<UserResponse>(`/users/${editTarget.id}`, { method: 'PATCH', body, token: token() });
         await apiRequest(`/groups/user/${editTarget.id}/memberships`, { method: 'PUT', body: { groupIds: form.groupIds }, token: token() });
         // bump cache-bust so the img tag reloads
@@ -343,6 +348,25 @@ export default function UsersPage() {
                       <span style={{ fontSize: '0.75rem', color: '#e53e3e' }}>Picture will be removed on save</span>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Media permissions */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label className="field-label">Media Permissions</label>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" checked={form.canSendVoice}
+                      onChange={(e) => setForm((f) => ({ ...f, canSendVoice: e.target.checked }))}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }} />
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>🎙️ Voice Messages</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" checked={form.canSendVideo}
+                      onChange={(e) => setForm((f) => ({ ...f, canSendVideo: e.target.checked }))}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }} />
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>📹 Video Messages</span>
+                  </label>
                 </div>
               </div>
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { AppContainer } from '../../container.js';
 import { createAuthMiddleware } from '../auth/auth.middleware.js';
-import { ForbiddenError } from '../../shared/errors.js';
+import { ForbiddenError, AppError } from '../../shared/errors.js';
 import { startConversationSchema, sendMessageSchema, messagesQuerySchema } from './messaging.schema.js';
 
 export function createMessagingRouter(container: AppContainer): Router {
@@ -68,8 +68,20 @@ export function createMessagingRouter(container: AppContainer): Router {
       const allowed = await conversationRepository.isParticipant(id, req.user!.id);
       if (!allowed) throw new ForbiddenError();
 
-      const { body } = sendMessageSchema.parse(req.body);
-      const message = await messageRepository.create(id, req.user!.id, body);
+      const { body, audioUrl, videoUrl } = sendMessageSchema.parse(req.body);
+
+      if (audioUrl !== undefined && !req.user!.canSendVoice) {
+        throw new AppError('No permission to send voice messages', 403);
+      }
+      if (videoUrl !== undefined && !req.user!.canSendVideo) {
+        throw new AppError('No permission to send video messages', 403);
+      }
+
+      const createOptions: { audioUrl?: string; videoUrl?: string } = {};
+      if (audioUrl !== undefined) createOptions.audioUrl = audioUrl;
+      if (videoUrl !== undefined) createOptions.videoUrl = videoUrl;
+
+      const message = await messageRepository.create(id, req.user!.id, body, createOptions);
       res.status(201).json({ message });
 
       const conversation = await conversationRepository.findById(id);
