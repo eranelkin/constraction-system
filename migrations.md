@@ -62,10 +62,10 @@ docker exec constractor_postgres pg_dump -U constractor constractor_dev > constr
 ## Checklist when switching machines
 
 - [ ] `git pull` — get latest code
-- [ ] `pnpm install` — sync dependencies
+- [ ] `pnpm install` — sync dependencies (picks up any new packages like `multer`)
 - [ ] `docker compose up -d` — infrastructure running
 - [ ] `pnpm --filter @constractor/api run db:migrate` — apply missing migrations
-- [ ] `apps/api/.env` exists and is up to date
+- [ ] `apps/api/.env` exists and is up to date (check for `UPLOAD_DIR`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`)
 
 ## Migration files location
 
@@ -90,3 +90,8 @@ Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migratio
 | `009_construction.sql` | `field_reports`, `schedule_tasks`, `rfis` tables + `rfi_number_seq` sequence |
 | `010_rfi_project.sql` | Adds `project VARCHAR(200)` column to `rfis` |
 | `011_field_report_photo.sql` | Adds `photo_base64 TEXT` and `photo_mime_type VARCHAR(50)` to `field_reports` |
+| `012_media_infrastructure.sql` | Creates `media_files` table (generic file tracking) and `settings` key-value table with seed values for video config |
+| `013_message_media.sql` | Adds `audio_url TEXT` and `video_url TEXT` columns to `messages` |
+| `014_user_media_permissions.sql` | Adds `can_send_voice` and `can_send_video` boolean columns to `users`; grants both to existing admins |
+| `015_entity_media.sql` | Adds `audio_url`/`video_url` columns to `field_reports` and `rfis` (for future use) |
+| `016_message_body_optional.sql` | Drops `messages_body_check` and replaces it to allow empty `body` when `audio_url` or `video_url` is present |

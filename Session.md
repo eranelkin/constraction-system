@@ -2,7 +2,7 @@
 
 > **Purpose:** Cross-machine continuity. Read this before starting any new session.
 > Update this file on demand: ask Claude to "update Session.md" after significant work.
-> Last updated: 2026-05-04 (session 2)
+> Last updated: 2026-05-05 (session 4)
 
 ---
 
@@ -69,7 +69,7 @@ cp .env.example apps/api/.env                      # copy env template
 pnpm install
 pnpm --filter @constractor/types build
 pnpm --filter @constractor/config build
-pnpm --filter @constractor/api run db:migrate      # runs all 11 migrations
+pnpm --filter @constractor/api run db:migrate      # runs all 16 migrations
 ```
 
 ### Daily start
@@ -269,6 +269,38 @@ ALTER TABLE field_reports
 ```
 Both columns nullable — existing reports unaffected. Populated by the mobile field report screen.
 
+### Migration 012 — media infrastructure
+```sql
+CREATE TABLE media_files (
+  id UUID PK, storage_key TEXT NOT NULL, url TEXT NOT NULL, mime_type VARCHAR(100) NOT NULL,
+  size_bytes INTEGER, duration_secs SMALLINT,
+  uploaded_by UUID FK users ON DELETE CASCADE,
+  entity_type VARCHAR(50), entity_id UUID, created_at TIMESTAMPTZ
+);
+CREATE TABLE settings (key VARCHAR(100) PK, value TEXT NOT NULL, updated_at TIMESTAMPTZ);
+INSERT INTO settings VALUES ('video_max_duration_seconds', '12'), ('video_quality', '0.4');
+```
+Domain-agnostic file tracking. `entity_type`/`entity_id` link files to any entity (message, report, rfi, etc.).
+
+### Migration 013 — message media columns
+```sql
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url TEXT, ADD COLUMN IF NOT EXISTS video_url TEXT;
+```
+
+### Migration 014 — user media permissions
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_send_voice BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_send_video BOOLEAN NOT NULL DEFAULT false;
+UPDATE users SET can_send_voice = true, can_send_video = true WHERE role = 'admin';
+```
+Both embedded in JWT — no extra API call needed on mobile.
+
+### Migration 015 — entity media (future-ready)
+```sql
+ALTER TABLE field_reports ADD COLUMN IF NOT EXISTS audio_url TEXT, ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE rfis ADD COLUMN IF NOT EXISTS audio_url TEXT, ADD COLUMN IF NOT EXISTS video_url TEXT;
+```
+
 ### Migration runner
 The runner uses a `schema_migrations` table to track which files have been applied. It is safe to run `db:migrate` multiple times — only new files are executed.
 
@@ -308,7 +340,8 @@ GET  /messaging/conversations                  → { conversations: Conversation
 POST /messaging/conversations                  → { conversation }          (body: participantId; finds or creates direct)
 GET  /messaging/conversations/:id/messages     → { messages[] }            (?after=<uuid> newer, ?before=<uuid> older, ?limit=1-100 default 50)
                                                                             each message includes translatedBody if cached for req.user.language
-POST /messaging/conversations/:id/messages     → { message }               (body: body)
+POST /messaging/conversations/:id/messages     → { message }               (body: { body?, audioUrl?, videoUrl? }; body can be '' if audioUrl or videoUrl present;
+                                                                            403 if audioUrl and !canSendVoice, or videoUrl and !canSendVideo)
 POST /messaging/conversations/:id/read         → 204                       (updates last_read_at → clears unread badge)
 
 GET  /groups/mine                              → { groups: PublicGroup[] } (ALL auth users — returns own groups)
@@ -343,6 +376,14 @@ PATCH /rfis/:id                                → { rfi }  (body: status?, prio
                                                             if status→'answered'/'closed': resolvedAt stamped automatically
 DELETE /rfis/:id                               → 204  (admin only)
 
+POST /media/upload                             → { url, mediaFileId }    (all auth; multipart `file` field; allowed: audio/m4a, audio/mpeg, audio/aac, audio/wav, video/mp4, video/quicktime, video/webm; max 50MB)
+GET  /media/files                              → { files: MediaFile[] }  (admin only)
+DELETE /media/files                            → 204                     (admin only; body: { ids: string[] }; bulk delete from storage + DB)
+DELETE /media/files/:id                        → 204                     (admin only; single delete from storage + DB)
+
+GET  /settings                                 → { videoMaxDurationSeconds, videoQuality }  (all auth)
+PATCH /settings                                → { videoMaxDurationSeconds, videoQuality }  (admin only; body: videoMaxDurationSeconds? 5-120, videoQuality? 0.1-1.0)
+
 GET  /jobs ...                                 (unchanged, see jobs module)
 GET  /my/jobs, GET /my/applications            (unchanged)
 
@@ -373,39 +414,41 @@ interface ConversationSummary {
 `packages/types/src/` structure:
 ```
 providers/
-  IAuthProvider.ts       AuthUser (includes language: string), IAuthProvider
-  ISpeechProvider.ts     transcribe(buffer, mimeType, language?): Promise<string>
+  IAuthProvider.ts        AuthUser (id, email, displayName, role, language, canSendVoice, canSendVideo), IAuthProvider
+  ISpeechProvider.ts      transcribe(buffer, mimeType, language?): Promise<string>
   ITranslationProvider.ts translate(text, targetLanguage): Promise<string>
   IAIProvider.ts, IStorageProvider.ts, IQueueProvider.ts, IRealtimeProvider.ts
 domain/
-  User.ts                User, PublicUser, CreateUserDTO, UpdateUserDTO
-  Message.ts             Message { id, conversationId, senderId, senderName, body, createdAt, translatedBody? }
-  Job.ts                 Job, JobApplication
-  Group.ts               Group, PublicGroup, GroupMember, CreateGroupDTO, UpdateGroupDTO
-  FieldReport.ts         FieldReport, FieldReportWithReporter, FieldReportType, FieldReportStatus,
-                           CreateFieldReportDTO (includes optional photoBase64/photoMimeType),
-                           UpdateFieldReportDTO
-  ScheduleTask.ts        ScheduleTask, ScheduleTaskWithCreator, ScheduleTaskStatus,
-                           CreateScheduleTaskDTO, UpdateScheduleTaskDTO
-  Rfi.ts                 Rfi, RfiWithUsers, RfiPriority, RfiStatus, CreateRfiDTO, UpdateRfiDTO
+  User.ts                 User, PublicUser (both include canSendVoice/canSendVideo), CreateUserDTO, UpdateUserDTO
+  Message.ts              Message { id, conversationId, senderId, senderName, body, audioUrl, videoUrl, createdAt, translatedBody? }
+  Job.ts                  Job, JobApplication
+  Group.ts                Group, PublicGroup, GroupMember, CreateGroupDTO, UpdateGroupDTO
+  FieldReport.ts          FieldReport, FieldReportWithReporter, FieldReportType, FieldReportStatus,
+                            CreateFieldReportDTO (includes optional photoBase64/photoMimeType),
+                            UpdateFieldReportDTO
+  ScheduleTask.ts         ScheduleTask, ScheduleTaskWithCreator, ScheduleTaskStatus,
+                            CreateScheduleTaskDTO, UpdateScheduleTaskDTO
+  Rfi.ts                  Rfi, RfiWithUsers, RfiPriority, RfiStatus, CreateRfiDTO, UpdateRfiDTO
+  MediaFile.ts            MediaFile { id, storageKey, url, mimeType, sizeBytes, durationSecs, uploadedBy, uploaderName, entityType, entityId, createdAt }
+  Settings.ts             PlatformSettings { videoMaxDurationSeconds, videoQuality }
 api/
-  auth.dto.ts            ContactUser, ListUsersResponse
-  users.dto.ts           ListUsersResponse, UserResponse, CreateUserRequest, UpdateUserRequest
-  jobs.dto.ts            JobSummary, JobDetail, ...
-  messaging.dto.ts       ConversationSummary (with unreadCount), ListMessagesResponse
-  groups.dto.ts          ListGroupsResponse, GroupResponse, CreateGroupRequest, UpdateGroupRequest
-  field-reports.dto.ts   ListFieldReportsResponse, FieldReportResponse, CreateFieldReportRequest, UpdateFieldReportRequest
-  schedule-tasks.dto.ts  ListScheduleTasksResponse, ScheduleTaskResponse, CreateScheduleTaskRequest, UpdateScheduleTaskRequest
-  rfis.dto.ts            ListRfisResponse, RfiResponse, CreateRfiRequest, UpdateRfiRequest
+  auth.dto.ts             ContactUser, ListUsersResponse
+  users.dto.ts            ListUsersResponse, UserResponse, CreateUserRequest, UpdateUserRequest (+ canSendVoice/canSendVideo)
+  jobs.dto.ts             JobSummary, JobDetail, ...
+  messaging.dto.ts        ConversationSummary (with unreadCount), ListMessagesResponse
+  groups.dto.ts           ListGroupsResponse, GroupResponse, CreateGroupRequest, UpdateGroupRequest
+  field-reports.dto.ts    ListFieldReportsResponse, FieldReportResponse, CreateFieldReportRequest, UpdateFieldReportRequest
+  schedule-tasks.dto.ts   ListScheduleTasksResponse, ScheduleTaskResponse, CreateScheduleTaskRequest, UpdateScheduleTaskRequest
+  rfis.dto.ts             ListRfisResponse, RfiResponse, CreateRfiRequest, UpdateRfiRequest
 ```
 
 ### Key shapes
 ```typescript
 // AuthUser — embedded in JWT
-interface AuthUser { id, email, displayName, role, language: string }
+interface AuthUser { id, email, displayName, role, language: string, canSendVoice: boolean, canSendVideo: boolean }
 
 // Message — translatedBody populated by list() from DB cache
-interface Message { id, conversationId, senderId, senderName, body, createdAt: Date, translatedBody?: string }
+interface Message { id, conversationId, senderId, senderName, body, audioUrl: string|null, videoUrl: string|null, createdAt: Date, translatedBody?: string }
 
 // Group domain
 interface Group { id, name, description: string|null, color: string|null, emoji: string|null,
@@ -515,14 +558,17 @@ Groups = named collections of users (name + description + color + emoji). Manage
 /manage/reports     Field reports — submit + manage, filterable table, detail panel
 /manage/schedule    Schedule & delays — task list, log delay form, detail drawer
 /manage/rfis        RFIs — create, assign, mark in-review / answered / escalate / close
-/manage/users       User management — full CRUD, language, avatar, group membership
+/manage/users       User management — full CRUD, language, avatar, group membership, media permissions
 /manage/groups      Group management — full CRUD, emoji/color, member list
 /manage/tasks       Placeholder — coming soon
+/manage/settings    Platform settings — video duration + quality (admin only)
+/manage/media       Media file management — Videos + Audios tabs, multi-select delete + download (admin only)
 ```
 
 ### Access control
 - Redirects to `/login` if not authenticated or if `role === 'member'`
-- Header: logo + nav tabs on left, user avatar + role badge + logout on right
+- Header: logo + nav tabs on left, user avatar + role badge + logout + ⚙️ gear dropdown on right
+- **Gear dropdown** (admin only): click ⚙️ to open a menu with "⚙️ Video Settings" → `/manage/settings` and "🎞️ Media Files" → `/manage/media`; closes on outside click
 
 ### Dashboard (`/manage/dashboard`) — **live API**
 - Fetches `/rfis`, `/schedule-tasks`, `/field-reports`, `/users` in parallel on load
@@ -556,8 +602,24 @@ Groups = named collections of users (name + description + color + emoji). Manage
 
 ### User form
 - Fields: display name, email, password (create only), role, language (14 options), avatar upload (jpg/png/webp/gif, max 2MB)
+- **Media permissions:** 🎙️ Voice Messages (`canSendVoice`) + 📹 Video Messages (`canSendVideo`) checkboxes
 - Group membership: colored toggle pills (one per group)
 - On save: PATCH/POST user → `PUT /groups/user/:id/memberships { groupIds }`
+
+### Settings page (`/manage/settings`) — admin only
+- Video max recording duration: range slider 5–60s (saved as `video_max_duration_seconds` in DB)
+- Video quality: select Low/Medium/High (saved as `video_quality` in DB)
+- Accessible via the ⚙️ gear dropdown (no longer a nav tab)
+
+### Media Files page (`/manage/media`) — admin only
+- Two inner tabs: **Videos** (filtered by `mimeType.startsWith('video/')`) and **Audios** (`audio/`)
+- Videos tab: each row shows a `160×100` inline `<video controls>` player + uploader, size, date+time
+- Audios tab: each row shows filename + compact `<audio controls>` player (220px wide)
+- Multi-select via checkboxes (select-all in header); selection resets on tab switch
+- Bulk toolbar (appears when ≥1 selected): **🗑 Delete selected** → `DELETE /media/files { ids }` | **⬇ Download selected** → fetch+blob each file
+- Single-row 🗑 button for immediate one-file delete
+- Table container has `max-height: calc(100vh - 300px)` with scrollable body; thead is `position: sticky` so headers stay visible
+- Date column shows date on first line, time (`HH:MM`) in small grey on second line
 
 ### Group form
 - Fields: name, description, emoji picker, color palette, member checkbox list
@@ -584,6 +646,7 @@ Do NOT change this to `<Stack>` — on Android, switching to a native Stack navi
 - 🗑️ **Clear All Messages** button — calls `POST /dev/clear-messages` (deletes messages + translations, keeps users/groups/conversations)
 
 ### Home screen (`(home)/index.tsx`) ✅
+- On mount: calls `GET /auth/me` after loading stored user to get fresh `canSendVoice`/`canSendVideo` permissions (JWT permissions lag up to 15min without this)
 - Orange header "🏗️ Constractor", user avatar (loads from API), logout button (⏻ with confirmation)
 - **Msg tab:** fetches `/auth/users` + `/groups/mine` + `/messaging/conversations` in parallel
   - Section: **💬 Direct Messages** — contact cards with user photo (API fallback to emoji)
@@ -610,6 +673,8 @@ Do NOT change this to `<Stack>` — on Android, switching to a native Stack navi
 - **Bubbles:** orange (self, right) / white (others, left) with comic borders
   - Direct: loads other user's avatar from API
   - Group: colored circle with sender's first initial (color derived from `senderId.charCodeAt(0)`)
+  - **Audio bubble:** `msg.audioUrl` → 🎵 label + ▶/⏹ play button; tap toggles `Audio.Sound` playback
+  - **Video bubble:** `msg.videoUrl` → expo-av `<Video>` component with native controls (220×160)
 - **Real-time via Socket.IO** (`USE_REAL_REALTIME=true` required)
   - Socket joins `conversation:{id}` room BEFORE the REST fetch (prevents race: messages sent during initial load arrive via socket and are deduped)
   - `new_message` handler translates before showing (see §9)
@@ -618,8 +683,10 @@ Do NOT change this to `<Stack>` — on Android, switching to a native Stack navi
   - On blur: `useFocusEffect` cleanup → `POST /read` (ensures badge clears after leaving)
   - On `new_message` socket event: `POST /read` fire-and-forget
 - **Backward pagination:** `onEndReached` → `loadOlder()` fetches `?before=<oldestId>` (50 messages). Spinner at top while loading. `hasMore` flag stops when fewer than 50 returned.
-- **Voice:** record (expo-av) → Groq Whisper transcribe → edit → send.
-- **Input bar:** text input + send ➤ / voice 🎙️ toggle.
+- **Voice transcription (🎙️):** record (expo-av) → Groq Whisper transcribe → edit → send as text.
+- **Voice message (🎵, only if `canSendVoice`):** tap to start recording → tap stop/send → `POST /media/upload` → `POST /messages { audioUrl }`. Shows recording timer + cancel/send buttons in modal.
+- **Video message (📹, only if `canSendVideo`):** `ImagePicker.launchCameraAsync({ mediaTypes: 'videos', videoMaxDuration, quality })` → `POST /media/upload` → `POST /messages { videoUrl }`. Duration and quality fetched from `GET /settings` on mount.
+- **Input bar:** left side: 🎵 (if canSendVoice) + 📹 (if canSendVideo); right side: ➤ (text) / 🎙️ (transcription).
 
 ### Field Report screen (`report-new.tsx`) ✅
 Goal: submit a field report in under 10 seconds. Single scrollable form — no step wizard.
@@ -654,26 +721,77 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 1. **Mobile deployment (deferred)**
    - EAS Build setup (`eas.json` created, `mobile.md` has full guide)
    - Requires stable public HTTPS URL for `EXPO_PUBLIC_API_URL` before building
-   - Railway (or similar) for API hosting
+   - Fly.io + Neon (free tier) is recommended alternative to Railway
+   - Redis is installed but unused — `InMemoryQueueProvider` is active; omit Redis from production unless BullMQ is needed
 
 2. **Notifications + assignments**
    - Acknowledge flow in Field Reports will trigger notification to reporter
    - RFI assignment notification to assignee
    - Requires Expo Notifications setup
 
-3. **Mobile — RFIs (future)**
+4. **`entity_id` back-link on message delete** — `media_files.entity_id` is not nulled when the linked message is deleted. Low priority for a private LAN app.
+
+5. **Mobile — RFIs (future)**
    - Field workers can view and respond to RFIs on mobile
    - Similar flow to field report screen
 
-4. **Mobile Tasks tab** — currently "Coming Soon"; backed by `schedule_tasks` table already exists
+6. **Mobile Tasks tab** — currently "Coming Soon"; backed by `schedule_tasks` table already exists
 
-5. **Web: token auto-refresh** — `api-client.ts` has refresh logic (`attemptRefresh` on 401) but not pre-emptive; token expires silently if tab is idle >15 min without an API call
+7. **Web: token auto-refresh** — `api-client.ts` has refresh logic (`attemptRefresh` on 401) but not pre-emptive; token expires silently if tab is idle >15 min without an API call
 
-6. **Socket reconnect on foreground** — no `AppState` listener exists; if app is backgrounded and socket disconnects, messages may be missed until the chat screen is re-mounted
+8. **Socket reconnect on foreground** — no `AppState` listener exists; if app is backgrounded and socket disconnects, messages may be missed until the chat screen is re-mounted
+
+9. **Voice/video in field reports** — `audio_url`/`video_url` columns exist on `field_reports` and `rfis` (migration 015), but the API, form, and mobile UI do not yet use them
 
 ---
 
-## 15. Outstanding Bugs / Known Issues
+## 15. Voice & Video Messages
+
+### Architecture overview
+Media is handled generically — the same upload pipeline works for messages, field reports, RFIs, or any future entity.
+
+**Upload flow:**
+1. Mobile calls `POST /media/upload` with `multipart/form-data` (field: `file`)
+2. API validates MIME type, saves via `storageProvider.upload()` → `uploads/{uuid}.ext`
+3. Row inserted into `media_files` with `uploaded_by`, `entity_type=null`, `entity_id=null` (entity linking is optional)
+4. Returns `{ url: '/uploads/{key}', mediaFileId }`
+5. Mobile then posts `POST /messages { audioUrl }` or `{ videoUrl }` with the returned URL
+
+**Permission model:**
+- `can_send_voice` / `can_send_video` columns on `users` table, default `false`
+- Embedded in JWT payload at login/refresh → `AuthUser.canSendVoice` / `AuthUser.canSendVideo`
+- Server checks these flags before accepting a message with `audioUrl` or `videoUrl` (returns 403 if missing)
+- Admin can toggle per-user in Web → `/manage/users` → edit → Media Permissions checkboxes
+- Mobile refreshes from `GET /auth/me` on home screen mount so new permissions apply without re-login
+
+**Settings (configurable by admin):**
+- `settings` table: key-value store in DB
+- `video_max_duration_seconds` (default `12`) — enforced client-side via ImagePicker `videoMaxDuration`
+- `video_quality` (default `0.4`) — passed as `quality` to ImagePicker
+- `GET /settings` (all auth users) → mobile reads on chat screen mount
+- `PATCH /settings` (admin only) → web `/manage/settings` page
+
+**Chat screen buttons (only visible if user has permission):**
+- 🎵 = voice message (teal `#4ECDC4`) — tap start → timer modal → tap send → upload → POST with `audioUrl`
+- 📹 = video message (purple `#A29BFE`) — opens `VideoRecorderModal` (custom camera) → upload → POST with `videoUrl`
+- 🎙️ = voice transcription (yellow, always) — unchanged from before; record → Groq → editable text → send
+
+**Video recording — `VideoRecorderModal` (`apps/mobile/src/app/(messages)/VideoRecorderModal.tsx`):**
+- Uses `expo-camera` (`CameraView`) instead of `ImagePicker` so duration is enforced in real time
+- `recordAsync({ maxDuration })` auto-stops at the configured limit — the user physically cannot record longer
+- Full-screen modal: camera preview + red progress bar across top + elapsed/max timer pill
+- Record button (white ring + red circle) → press again (or wait) to stop; 🔄 flip camera; ✕ cancel
+- `useCameraPermissions` + `useMicrophonePermissions` from `expo-camera`; prompts inline if not granted
+- Returns URI to `handleVideoRecorded(uri)` in chat screen which uploads and POSTs the message
+
+**Playback (media URL resolution):**
+- `resolveMediaUrl(url)` helper at top of chat screen: prepends `API_URL` to relative `/uploads/...` paths
+- Audio: `Audio.Sound.createAsync({ uri: resolveMediaUrl(audioUrl) })` → `playAsync()`; `setOnPlaybackStatusUpdate` clears `playingId` on finish
+- Video: `expo-av <Video source={{ uri: resolveMediaUrl(videoUrl) }}>` with `useNativeControls`
+
+---
+
+## 16. Outstanding Bugs / Known Issues
 
 1. **Web: access token expiry** — `api-client.ts` will retry with a refresh token on 401, but there is no pre-emptive refresh. If a tab sits idle past 15 min and then makes a call, the first request fails with 401 before the retry fires — may cause a flash of error UI.
 2. **Web: jobs/dashboard pages** — `/jobs`, `/dashboard` (the non-manage one), etc. still use plain styles, not comic design.
@@ -681,7 +799,7 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 
 ---
 
-## 16. Fixed Bugs (for reference)
+## 17. Fixed Bugs (for reference)
 
 - **findOrCreate returned group conversation** — `ConversationRepository.findOrCreate` lacked `WHERE c.type = 'direct'`, so opening a DM after being added to a group would return the group conversation instead. Fixed by adding the type filter.
 - **Messages not appearing for receiver** — REST initial load returned oldest-first slice. Fixed: `list()` uses `ORDER BY created_at DESC LIMIT 50` wrapped in `ASC` subquery to return the most recent 50 messages.
@@ -692,7 +810,7 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 
 ---
 
-## 17. File Locations Cheat Sheet
+## 18. File Locations Cheat Sheet
 
 | What | Where |
 |---|---|
@@ -720,6 +838,7 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 | Shared types | `packages/types/src/` |
 | Web globals.css | `apps/web/src/app/globals.css` |
 | Web manage layout | `apps/web/src/app/manage/layout.tsx` |
+| Web settings page | `apps/web/src/app/manage/settings/page.tsx` |
 | Web dashboard page | `apps/web/src/app/manage/dashboard/page.tsx` |
 | Web reports page | `apps/web/src/app/manage/reports/page.tsx` |
 | Web schedule page | `apps/web/src/app/manage/schedule/page.tsx` |
@@ -736,15 +855,28 @@ Module-level singleton `socket`. `connectSocket(token)` returns existing if `soc
 | Mobile socket module | `apps/mobile/src/lib/socket.ts` |
 | Mobile token storage | `apps/mobile/src/lib/auth/token-storage.ts` |
 | Mobile API client | `apps/mobile/src/lib/api-client.ts` |
+| Media router | `apps/api/src/modules/media/media.router.ts` |
+| Settings router | `apps/api/src/modules/settings/settings.router.ts` |
+| Web media page | `apps/web/src/app/manage/media/page.tsx` |
+| Mobile video recorder | `apps/mobile/src/app/(messages)/VideoRecorderModal.tsx` |
 | Mobile env | `apps/mobile/.env` |
 | API env | `apps/api/.env` |
 
 ### apps/api/.env required keys
 ```
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/constractor
-JWT_SECRET=<secret>
-GROQ_API_KEY=<key>           # required for real speech + translation
-USE_REAL_REALTIME=true       # Socket.IO — required for mobile chat to receive messages
-USE_REAL_SPEECH=true         # Groq Whisper STT
-USE_REAL_TRANSLATION=true    # Groq LLaMA translation + DB cache
+ACCESS_TOKEN_SECRET=<secret>           # min 16 chars
+REFRESH_TOKEN_SECRET=<secret>          # min 16 chars
+GROQ_API_KEY=<key>                     # required for real speech + translation
+USE_REAL_REALTIME=true                 # Socket.IO — required for mobile chat to receive messages
+USE_REAL_SPEECH=true                   # Groq Whisper STT
+USE_REAL_TRANSLATION=true              # Groq LLaMA translation + DB cache
+UPLOAD_DIR=./uploads                   # local media file storage (default); auto-created by LocalStorageProvider
 ```
+
+**Media upload notes:**
+- `LocalStorageProvider.upload()` saves files under `UPLOAD_DIR/{key}` and creates subdirectories recursively
+- `GET /uploads/*` is served as public static files from `process.cwd()/uploads` — no auth required (private LAN app)
+- Allowed upload types: `audio/m4a`, `audio/mp4`, `audio/mpeg`, `audio/aac`, `audio/wav`, `video/mp4`, `video/quicktime`, `video/webm`
+- Max file size: 50 MB (enforced by multer)
+- Every upload inserts a row in `media_files` for future admin management

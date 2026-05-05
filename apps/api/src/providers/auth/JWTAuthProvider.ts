@@ -29,6 +29,8 @@ interface JWTPayload {
   role: string;
   displayName: string;
   language: string;
+  canSendVoice: boolean;
+  canSendVideo: boolean;
 }
 
 function hashToken(token: string): string {
@@ -88,6 +90,8 @@ export class JWTAuthProvider implements IAuthProvider {
           displayName: payload.displayName,
           language: payload.language ?? 'en',
           emailVerified: true,
+          canSendVoice: payload.canSendVoice ?? false,
+          canSendVideo: payload.canSendVideo ?? false,
         },
       };
     } catch (err) {
@@ -147,6 +151,8 @@ export class JWTAuthProvider implements IAuthProvider {
       role: user.role,
       displayName: user.displayName,
       language: user.language,
+      canSendVoice: user.canSendVoice,
+      canSendVideo: user.canSendVideo,
     };
 
     const accessToken = jwt.sign(payload, this.config.ACCESS_TOKEN_SECRET, {
@@ -180,6 +186,8 @@ export class JWTAuthProvider implements IAuthProvider {
       displayName: user.displayName,
       language: user.language,
       emailVerified: user.emailVerified,
+      canSendVoice: user.canSendVoice,
+      canSendVideo: user.canSendVideo,
     };
   }
 }

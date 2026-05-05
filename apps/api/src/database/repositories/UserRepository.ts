@@ -11,6 +11,8 @@ interface UserRow {
   language: string;
   email_verified: boolean;
   is_active: boolean;
+  can_send_voice: boolean;
+  can_send_video: boolean;
   created_at: Date;
   avatar_data: Buffer | null;
   avatar_mime_type: string | null;
@@ -26,6 +28,8 @@ function rowToUser(row: UserRow): User {
     language: row.language,
     emailVerified: row.email_verified,
     isActive: row.is_active,
+    canSendVoice: row.can_send_voice,
+    canSendVideo: row.can_send_video,
     createdAt: row.created_at,
   };
 }
@@ -39,6 +43,8 @@ function rowToPublicUser(row: UserRow): PublicUser {
     language: row.language,
     emailVerified: row.email_verified,
     isActive: row.is_active,
+    canSendVoice: row.can_send_voice,
+    canSendVideo: row.can_send_video,
     createdAt: row.created_at,
     hasAvatar: row.avatar_data !== null,
   };
@@ -122,6 +128,8 @@ export class UserRepository implements IUserRepository {
     if (data.emailVerified !== undefined){ fields.push(`email_verified = $${idx++}`); values.push(data.emailVerified); }
     if (data.language !== undefined)     { fields.push(`language = $${idx++}`);       values.push(data.language); }
     if (data.isActive !== undefined)     { fields.push(`is_active = $${idx++}`);      values.push(data.isActive); }
+    if (data.canSendVoice !== undefined) { fields.push(`can_send_voice = $${idx++}`); values.push(data.canSendVoice); }
+    if (data.canSendVideo !== undefined) { fields.push(`can_send_video = $${idx++}`); values.push(data.canSendVideo); }
 
     // avatarData: null → clear, Buffer → set, undefined → no change
     if (data.avatarData !== undefined) {

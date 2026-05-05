@@ -5,8 +5,13 @@ export const startConversationSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  body: z.string().min(1).max(4000),
-});
+  body: z.string().max(4000).default(''),
+  audioUrl: z.string().min(1).optional(),
+  videoUrl: z.string().min(1).optional(),
+}).refine(
+  (d) => d.body.length > 0 || d.audioUrl !== undefined || d.videoUrl !== undefined,
+  { message: 'Message must have a body, audioUrl, or videoUrl' },
+);
 
 export const messagesQuerySchema = z.object({
   after:  z.string().uuid().optional(),

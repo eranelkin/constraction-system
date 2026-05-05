@@ -100,11 +100,13 @@ export function createUsersRouter(container: AppContainer): Router {
       }
 
       const updateData: Parameters<typeof userRepository.update>[1] = {};
-      if (data.displayName !== undefined) updateData.displayName = data.displayName;
-      if (data.email !== undefined)       updateData.email = data.email;
-      if (data.role !== undefined)        updateData.role = data.role;
-      if (data.language !== undefined)    updateData.language = data.language;
-      if (data.password !== undefined)    updateData.passwordHash = await bcrypt.hash(data.password, 12);
+      if (data.displayName !== undefined)  updateData.displayName = data.displayName;
+      if (data.email !== undefined)        updateData.email = data.email;
+      if (data.role !== undefined)         updateData.role = data.role;
+      if (data.language !== undefined)     updateData.language = data.language;
+      if (data.password !== undefined)     updateData.passwordHash = await bcrypt.hash(data.password, 12);
+      if (data.canSendVoice !== undefined) updateData.canSendVoice = data.canSendVoice;
+      if (data.canSendVideo !== undefined) updateData.canSendVideo = data.canSendVideo;
 
       // avatar: null → clear, string → update, absent → no change
       if (data.avatar === null) {

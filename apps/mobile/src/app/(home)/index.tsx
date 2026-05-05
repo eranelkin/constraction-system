@@ -159,10 +159,19 @@ export default function HomeScreen() {
   const meRef = useRef<AuthUser | null>(null);
 
   useEffect(() => {
-    void getStoredUser().then((u) => {
+    void (async () => {
+      const u = await getStoredUser();
       setMe(u);
       meRef.current = u;
-    });
+
+      // Refresh user object from server to get latest permissions
+      try {
+        const token = await getAccessToken();
+        const fresh = await apiRequest<{ user: AuthUser }>('/auth/me', { token: token ?? undefined });
+        setMe(fresh.user);
+        meRef.current = fresh.user;
+      } catch { /* use cached user */ }
+    })();
   }, []);
 
   const loadData = useCallback(async (myId?: string, silent = false) => {

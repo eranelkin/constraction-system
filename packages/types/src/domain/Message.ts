@@ -18,6 +18,8 @@ export interface Message {
   senderId: string;
   senderName: string;
   body: string;
+  audioUrl: string | null;
+  videoUrl: string | null;
   createdAt: Date;
   translatedBody?: string;
 }
