@@ -9,14 +9,15 @@ import {
   Platform,
   StyleSheet,
   Alert,
-  SafeAreaView,
   StatusBar,
   Modal,
   ActivityIndicator,
   Image,
   Keyboard,
   TouchableWithoutFeedback,
+  useColorScheme,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import { ms, s, vs } from '../../lib/responsive';
@@ -103,6 +104,8 @@ export default function ThreadScreen() {
   }>();
 
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const isDark = useColorScheme() === 'dark';
   const displayName = userName ?? t('chat.today');
   const emoji = avatarEmoji ?? '💬';
   const color = avatarColor ?? '#FF6B2B';
@@ -727,11 +730,11 @@ export default function ThreadScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#FF6B2B" />
+    <View style={styles.safe}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header extends behind the status bar so orange fills that strip */}
+      <View style={[styles.header, { paddingTop: insets.top + ms(10) }]}>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>‹</Text>
         </Pressable>
@@ -945,7 +948,7 @@ export default function ThreadScreen() {
         onClose={() => setShowVideoRecorder(false)}
         onRecorded={(uri) => void handleVideoRecorded(uri)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -964,7 +967,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FF6B2B',
     paddingHorizontal: ms(12),
-    paddingVertical: ms(10),
+    paddingBottom: ms(10),
     borderBottomWidth: 2.5,
     borderBottomColor: '#1C1C2E',
     gap: ms(10),

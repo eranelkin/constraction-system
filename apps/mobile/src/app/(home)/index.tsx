@@ -6,13 +6,15 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
   Alert,
   StatusBar,
   Image,
   Modal,
   TouchableOpacity,
+  useColorScheme,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useTranslation } from "react-i18next";
 import {
@@ -145,6 +147,8 @@ type ListItem =
 
 export default function HomeScreen() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const isDark = useColorScheme() === "dark";
   const [tab, setTab] = useState<Tab>("msg");
   const [fabOpen, setFabOpen] = useState(false);
   const [users, setUsers] = useState<ContactUser[]>([]);
@@ -334,11 +338,11 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#FF6B2B" />
+    <View style={styles.safe}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header extends behind the status bar so orange fills that strip */}
+      <View style={[styles.header, { paddingTop: insets.top + ms(12) }]}>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {t('home.title')}
         </Text>
@@ -362,7 +366,7 @@ export default function HomeScreen() {
             ]}
             onPress={handleLogout}
           >
-            <Text style={styles.logoutBtnText}>⏻</Text>
+            <Ionicons name="log-out-outline" size={ms(18)} color="#FFFFFF" />
           </Pressable>
         </View>
       </View>
@@ -568,7 +572,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -580,7 +584,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#FF6B2B",
     paddingHorizontal: ms(16),
-    paddingVertical: ms(12),
+    paddingBottom: ms(12),
     borderBottomWidth: 2.5,
     borderBottomColor: "#1C1C2E",
     flexDirection: "row",
@@ -612,10 +616,6 @@ const styles = StyleSheet.create({
   },
   logoutBtnPressed: {
     backgroundColor: "rgba(255,255,255,0.35)",
-  },
-  logoutBtnText: {
-    fontSize: ms(15),
-    color: "#FFFFFF",
   },
   tabRow: {
     flexDirection: "row",

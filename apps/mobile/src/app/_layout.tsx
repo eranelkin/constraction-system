@@ -1,6 +1,7 @@
 import '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, I18nManager, DevSettings } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useRouter } from 'expo-router';
 import i18n from 'i18next';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
@@ -36,14 +37,16 @@ export default function RootLayout() {
   }, [router]);
 
   return (
-    <View style={styles.root}>
-      <Slot />
-      {checking && (
-        <View style={styles.splash}>
-          <Text style={styles.splashEmoji}>🏗️</Text>
-        </View>
-      )}
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.root}>
+        <Slot />
+        {checking && (
+          <View style={styles.splash}>
+            <Text style={styles.splashEmoji}>🏗️</Text>
+          </View>
+        )}
+      </View>
+    </SafeAreaProvider>
   );
 }
 

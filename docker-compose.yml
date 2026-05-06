@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: constractor_postgres
+    container_name: constructor-site-management-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: constractor_dev
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: constractor_redis
+    container_name: constructor-site-management-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -33,4 +33,8 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: constraction-system_postgres_data
   redis_data:
+    external: true
+    name: constraction-system_redis_data

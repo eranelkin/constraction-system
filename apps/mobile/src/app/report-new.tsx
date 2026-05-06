@@ -9,11 +9,12 @@ import {
   Alert,
   ActivityIndicator,
   Image,
-  SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  useColorScheme,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Audio } from 'expo-av';
@@ -29,6 +30,8 @@ const PROJECTS = ['Downtown Tower', 'Harbor Bridge', 'Riverside Complex', 'Metro
 
 export default function ReportNewScreen() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const isDark = useColorScheme() === 'dark';
 
   const TYPES = useMemo((): { value: FieldReportType; label: string; emoji: string }[] => [
     { value: 'progress', label: t('report.types.progress'), emoji: '📈' },
@@ -186,14 +189,14 @@ export default function ReportNewScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#FF6B2B" />
+    <View style={styles.safe}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header extends behind the status bar so orange fills that strip */}
+        <View style={[styles.header, { paddingTop: insets.top + ms(12) }]}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Text style={styles.closeBtnText}>✕</Text>
           </Pressable>
@@ -330,7 +333,7 @@ export default function ReportNewScreen() {
           <View style={{ height: vs(20) }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#FF6B2B',
     paddingHorizontal: ms(16),
-    paddingVertical: ms(12),
+    paddingBottom: ms(12),
     borderBottomWidth: 2.5,
     borderBottomColor: '#1C1C2E',
     flexDirection: 'row',
