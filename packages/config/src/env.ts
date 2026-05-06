@@ -25,6 +25,7 @@ const envSchema = z
     USE_REAL_REALTIME: booleanFromString,
     USE_REAL_SPEECH: booleanFromString,
     USE_REAL_TRANSLATION: booleanFromString,
+    USE_REAL_FIELD_EXTRACTION: booleanFromString,
     OPENAI_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
     AWS_REGION: z.string().optional(),

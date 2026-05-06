@@ -22,6 +22,7 @@ import * as FileSystem from 'expo-file-system';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
 import { apiRequest } from '@/lib/api-client';
 import { ms, s, vs } from '@/lib/responsive';
+import { useFieldExtraction, type FieldDefinition } from '@/lib/hooks/useFieldExtraction';
 import type { FieldReportType } from '@constractor/types';
 
 const PROJECTS = ['Downtown Tower', 'Harbor Bridge', 'Riverside Complex', 'Metro Station'];
@@ -45,6 +46,16 @@ export default function ReportNewScreen() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingReadyRef = useRef<Promise<void> | null>(null);
+  const isRecordingRef = useRef(false);
+
+  const { isExtracting, extract } = useFieldExtraction();
+
+  const EXTRACT_FIELDS: FieldDefinition[] = useMemo(() => [
+    { name: 'type',     type: 'enum',   description: 'nature of the report', options: TYPES.map((t) => t.value) },
+    { name: 'project',  type: 'enum',   description: 'project or site name', options: PROJECTS },
+    { name: 'location', type: 'string', description: 'specific spot (floor, zone, elevator, area)' },
+  ], [TYPES]);
 
   async function handleTakePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -66,6 +77,8 @@ export default function ReportNewScreen() {
   }
 
   async function startRecording() {
+    let resolve!: () => void;
+    recordingReadyRef.current = new Promise<void>((res) => { resolve = res; });
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
@@ -80,10 +93,15 @@ export default function ReportNewScreen() {
       setIsRecording(true);
     } catch {
       Alert.alert(t('common.error'), t('report.couldNotRecord'));
+    } finally {
+      resolve();
+      recordingReadyRef.current = null;
     }
   }
 
   async function stopAndTranscribe() {
+    // Wait for recording to finish initializing if start is still in progress
+    if (recordingReadyRef.current) await recordingReadyRef.current;
     const recording = recordingRef.current;
     if (!recording) return;
     setIsRecording(false);
@@ -104,11 +122,27 @@ export default function ReportNewScreen() {
         token: token ?? undefined,
       });
       setDescription(data.text);
+
+      void extract(data.text, EXTRACT_FIELDS).then((extracted) => {
+        if (extracted['type'])     setType(extracted['type'] as FieldReportType);
+        if (extracted['project'])  setProject(extracted['project']);
+        if (extracted['location']) setLocation(extracted['location']);
+      });
     } catch {
       Alert.alert(t('common.error'), t('report.couldNotTranscribe'));
     } finally {
       setIsTranscribing(false);
     }
+  }
+
+  async function cancelRecording() {
+    if (recordingReadyRef.current) await recordingReadyRef.current;
+    const recording = recordingRef.current;
+    if (!recording) return;
+    recordingRef.current = null;
+    setIsRecording(false);
+    try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
   }
 
   async function handleSubmit() {
@@ -167,6 +201,48 @@ export default function ReportNewScreen() {
           <View style={{ width: s(36) }} />
         </View>
 
+        {/* Voice + Description — pinned above ScrollView so no responder conflict */}
+        <View style={styles.voiceBlock}>
+          <View
+            style={[styles.micBtn, isRecording && styles.micBtnActive, isTranscribing && styles.micBtnDisabled]}
+            onStartShouldSetResponder={() => !isTranscribing}
+            onResponderGrant={() => { isRecordingRef.current = true; void startRecording(); }}
+            onResponderRelease={() => { isRecordingRef.current = false; void stopAndTranscribe(); }}
+            onResponderTerminate={() => { isRecordingRef.current = false; void cancelRecording(); }}
+            onResponderTerminationRequest={() => !isRecordingRef.current}
+          >
+            {isTranscribing ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.micIcon}>{isRecording ? '🔴' : '🎤'}</Text>
+            )}
+            <Text style={styles.micText}>
+              {isTranscribing
+                ? t('report.voiceTranscribing')
+                : isRecording
+                  ? t('report.voiceRelease')
+                  : t('report.voiceHold')}
+            </Text>
+          </View>
+          {isExtracting && (
+            <View style={styles.extractingRow}>
+              <ActivityIndicator size="small" color="#FF6B2B" />
+              <Text style={styles.extractingText}>{t('common.analyzing')}</Text>
+            </View>
+          )}
+          <Text style={styles.label}>{t('report.descriptionLabel')}</Text>
+          <TextInput
+            style={styles.textArea}
+            value={description}
+            onChangeText={setDescription}
+            placeholder={t('report.descriptionPlaceholder')}
+            placeholderTextColor="#aaa"
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -183,40 +259,6 @@ export default function ReportNewScreen() {
               </View>
             )}
           </Pressable>
-
-          {/* Voice + Description */}
-          <View style={styles.section}>
-            <Text style={styles.label}>{t('report.descriptionLabel')}</Text>
-            <Pressable
-              style={[styles.micBtn, isRecording && styles.micBtnActive]}
-              onPressIn={() => void startRecording()}
-              onPressOut={() => void stopAndTranscribe()}
-              disabled={isTranscribing}
-            >
-              {isTranscribing ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.micIcon}>{isRecording ? '🔴' : '🎤'}</Text>
-              )}
-              <Text style={styles.micText}>
-                {isTranscribing
-                  ? t('report.voiceTranscribing')
-                  : isRecording
-                    ? t('report.voiceRelease')
-                    : t('report.voiceHold')}
-              </Text>
-            </Pressable>
-            <TextInput
-              style={styles.textArea}
-              value={description}
-              onChangeText={setDescription}
-              placeholder={t('report.descriptionPlaceholder')}
-              placeholderTextColor="#aaa"
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
 
           {/* Type */}
           <View style={styles.section}>
@@ -328,6 +370,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
+  voiceBlock: {
+    paddingHorizontal: ms(16),
+    paddingTop: ms(12),
+    paddingBottom: ms(8),
+    gap: ms(8),
+    backgroundColor: '#FFF9E6',
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(28,28,46,0.08)',
+  },
   content: {
     padding: ms(16),
     gap: ms(4),
@@ -386,9 +437,22 @@ const styles = StyleSheet.create({
     paddingVertical: ms(12),
     paddingHorizontal: ms(16),
   },
+  extractingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+  },
+  extractingText: {
+    fontSize: ms(13),
+    fontWeight: '600',
+    color: '#FF6B2B',
+  },
   micBtnActive: {
     backgroundColor: '#E53E3E',
     borderColor: '#E53E3E',
+  },
+  micBtnDisabled: {
+    opacity: 0.5,
   },
   micIcon: {
     fontSize: ms(20),

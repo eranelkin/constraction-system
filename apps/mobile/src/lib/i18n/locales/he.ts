@@ -7,6 +7,7 @@ const he: Translations = {
     loading: 'טוען…',
     ok: 'אישור',
     success: 'הצלחה',
+    analyzing: 'מנתח…',
   },
   landing: {
     subtitle: 'פלטפורמה לניהול קבלנים',

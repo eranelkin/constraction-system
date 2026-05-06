@@ -1,5 +1,5 @@
 import { config } from '@constractor/config';
-import type { IAIProvider, IStorageProvider, IQueueProvider, IRealtimeProvider, IAuthProvider, ISpeechProvider, ITranslationProvider } from '@constractor/types';
+import type { IAIProvider, IStorageProvider, IQueueProvider, IRealtimeProvider, IAuthProvider, ISpeechProvider, ITranslationProvider, IFieldExtractionProvider } from '@constractor/types';
 import { PostgreSQLAdapter } from './database/adapters/PostgreSQLAdapter.js';
 import { UserRepository } from './database/repositories/UserRepository.js';
 import { ConversationRepository } from './database/repositories/ConversationRepository.js';
@@ -22,6 +22,8 @@ import { MockSpeechProvider } from './providers/speech/MockSpeechProvider.js';
 import { GroqSpeechProvider } from './providers/speech/GroqSpeechProvider.js';
 import { MockTranslationProvider } from './providers/translation/MockTranslationProvider.js';
 import { GroqTranslationProvider } from './providers/translation/GroqTranslationProvider.js';
+import { MockFieldExtractionProvider } from './providers/field-extraction/MockFieldExtractionProvider.js';
+import { GroqFieldExtractionProvider } from './providers/field-extraction/GroqFieldExtractionProvider.js';
 import type { IDatabase } from './database/DatabaseProvider.js';
 import type { IUserRepository } from './database/repositories/IUserRepository.js';
 import type { IConversationRepository } from './database/repositories/IConversationRepository.js';
@@ -47,6 +49,7 @@ export interface AppContainer {
   realtimeProvider: IRealtimeProvider;
   speechProvider: ISpeechProvider;
   translationProvider: ITranslationProvider;
+  fieldExtractionProvider: IFieldExtractionProvider;
   translationCacheRepository: TranslationCacheRepository;
   groupRepository: IGroupRepository;
   fieldReportRepository: IFieldReportRepository;
@@ -93,6 +96,10 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
     ? new GroqTranslationProvider(groqApiKey ?? (() => { throw new Error('GROQ_API_KEY is required when USE_REAL_TRANSLATION=true'); })())
     : new MockTranslationProvider();
 
+  const fieldExtractionProvider: IFieldExtractionProvider = config.USE_REAL_FIELD_EXTRACTION
+    ? new GroqFieldExtractionProvider(groqApiKey ?? (() => { throw new Error('GROQ_API_KEY is required when USE_REAL_FIELD_EXTRACTION=true'); })())
+    : new MockFieldExtractionProvider();
+
   return {
     db,
     userRepository,
@@ -108,6 +115,7 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
     speechProvider,
     translationProvider,
     translationCacheRepository,
+    fieldExtractionProvider,
     groupRepository,
     fieldReportRepository,
     scheduleTaskRepository,

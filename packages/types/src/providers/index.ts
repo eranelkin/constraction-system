@@ -5,3 +5,4 @@ export type * from './IRealtimeProvider.js';
 export type * from './IAuthProvider.js';
 export type * from './ISpeechProvider.js';
 export type * from './ITranslationProvider.js';
+export type * from './IFieldExtractionProvider.js';

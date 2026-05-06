@@ -16,6 +16,7 @@ import { createScheduleTasksRouter } from './modules/schedule-tasks/schedule-tas
 import { createRfisRouter } from './modules/rfis/rfis.router.js';
 import { createMediaRouter } from './modules/media/media.router.js';
 import { createSettingsRouter } from './modules/settings/settings.router.js';
+import { createAIRouter } from './modules/ai/ai.router.js';
 import { createDevRouter } from './modules/dev/dev.router.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
@@ -49,6 +50,7 @@ export function createApp(container: AppContainer): Express {
   app.use('/rfis', createRfisRouter(container));
   app.use('/media', createMediaRouter(container));
   app.use('/settings', createSettingsRouter(container));
+  app.use('/ai', createAIRouter(container));
 
   if (config.NODE_ENV !== 'production') {
     app.use('/dev', createDevRouter(container));

@@ -5,6 +5,7 @@ const en = {
     loading: 'Loading…',
     ok: 'OK',
     success: 'Success',
+    analyzing: 'Analyzing…',
   },
   landing: {
     subtitle: 'Contractor management platform',
