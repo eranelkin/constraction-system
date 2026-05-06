@@ -9,12 +9,14 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { apiRequest } from '../../lib/api-client';
 import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
 import type { ListJobsResponse, JobSummary } from '@constractor/types';
 
 export default function JobBoardScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [role, setRole] = useState<string | null>(null);
@@ -25,9 +27,9 @@ export default function JobBoardScreen() {
       const data = await apiRequest<ListJobsResponse>('/jobs', { token: token ?? undefined });
       setJobs(data.jobs);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load jobs');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('jobs.list.errorLoad'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void (async () => {
@@ -55,7 +57,7 @@ export default function JobBoardScreen() {
         </View>
         <Text style={styles.cardLocation}>{item.location}</Text>
         <Text style={styles.cardApps}>
-          {item.applicationCount} application{item.applicationCount !== 1 ? 's' : ''}
+          {t('jobs.list.applications', { count: item.applicationCount })}
         </Text>
       </TouchableOpacity>
     );
@@ -67,9 +69,9 @@ export default function JobBoardScreen() {
         <View style={styles.postRow}>
           <TouchableOpacity
             style={styles.postBtn}
-            onPress={() => Alert.alert('Post a Job', 'Use the web app to post a new job.')}
+            onPress={() => Alert.alert(t('jobs.list.postJobAlertTitle'), t('jobs.list.postJobAlertMessage'))}
           >
-            <Text style={styles.postBtnText}>+ Post a Job</Text>
+            <Text style={styles.postBtnText}>{t('jobs.list.postBtn')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -79,7 +81,7 @@ export default function JobBoardScreen() {
         renderItem={renderItem}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
         contentContainerStyle={jobs.length === 0 ? styles.emptyContainer : styles.listContent}
-        ListEmptyComponent={<Text style={styles.empty}>No open jobs yet.</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{t('jobs.list.noJobs')}</Text>}
       />
     </View>
   );

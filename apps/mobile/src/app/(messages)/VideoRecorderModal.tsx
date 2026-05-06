@@ -7,6 +7,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }: Props) {
+  const { t } = useTranslation();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const [facing, setFacing] = useState<'front' | 'back'>('back');
@@ -78,15 +80,15 @@ export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }
       <View style={styles.container}>
         {permissionsGranted === false ? (
           <View style={styles.permissionBox}>
-            <Text style={styles.permissionText}>Camera and microphone access is required.</Text>
+            <Text style={styles.permissionText}>{t('video.permissionRequired')}</Text>
             <Pressable style={styles.permissionBtn} onPress={async () => {
               await requestCameraPermission();
               await requestMicPermission();
             }}>
-              <Text style={styles.permissionBtnText}>Grant permissions</Text>
+              <Text style={styles.permissionBtnText}>{t('video.grantPermissions')}</Text>
             </Pressable>
             <Pressable style={[styles.permissionBtn, { marginTop: 8, backgroundColor: '#444' }]} onPress={onClose}>
-              <Text style={styles.permissionBtnText}>Cancel</Text>
+              <Text style={styles.permissionBtnText}>{t('video.cancel')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -110,7 +112,7 @@ export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }
                   </Text>
                 </>
               ) : (
-                <Text style={styles.hintText}>Max {formatSecs(maxDuration)}</Text>
+                <Text style={styles.hintText}>{t('video.maxDuration', { duration: formatSecs(maxDuration) })}</Text>
               )}
             </View>
 

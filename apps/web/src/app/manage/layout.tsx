@@ -74,7 +74,7 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
   if (!user) return null;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f2f5', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
       {/* Top nav */}
       <header style={{
         background: 'var(--navy)',
@@ -84,6 +84,7 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
         alignItems: 'center',
         gap: '1rem',
         height: '60px',
+        flexShrink: 0,
       }}>
         {/* Logo + Tabs grouped on the left */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginRight: 'auto' }}>
@@ -148,45 +149,6 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
           }}>
             📄 RFIs
           </Link>
-          <Link href="/manage/users" style={{
-            padding: '0.4rem 1.2rem',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '0.9rem',
-            textDecoration: 'none',
-            background: pathname.startsWith('/manage/users') ? 'var(--orange)' : 'transparent',
-            color: pathname.startsWith('/manage/users') ? '#fff' : 'rgba(255,255,255,0.65)',
-            border: pathname.startsWith('/manage/users') ? 'var(--border)' : '2px solid transparent',
-            transition: 'all 0.15s',
-          }}>
-            👥 Users
-          </Link>
-          <Link href="/manage/groups" style={{
-            padding: '0.4rem 1.2rem',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '0.9rem',
-            textDecoration: 'none',
-            background: pathname.startsWith('/manage/groups') ? 'var(--orange)' : 'transparent',
-            color: pathname.startsWith('/manage/groups') ? '#fff' : 'rgba(255,255,255,0.65)',
-            border: pathname.startsWith('/manage/groups') ? 'var(--border)' : '2px solid transparent',
-            transition: 'all 0.15s',
-          }}>
-            🏘️ Groups
-          </Link>
-          <Link href="/manage/tasks" style={{
-            padding: '0.4rem 1.2rem',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '0.9rem',
-            textDecoration: 'none',
-            background: pathname.startsWith('/manage/tasks') ? 'var(--orange)' : 'transparent',
-            color: pathname.startsWith('/manage/tasks') ? '#fff' : 'rgba(255,255,255,0.65)',
-            border: pathname.startsWith('/manage/tasks') ? 'var(--border)' : '2px solid transparent',
-            transition: 'all 0.15s',
-          }}>
-            ✅ Tasks
-          </Link>
           </nav>
         </div>
 
@@ -226,7 +188,7 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
                   cursor: 'pointer',
                   fontSize: '1.2rem',
                   padding: '0.2rem',
-                  opacity: (pathname.startsWith('/manage/settings') || pathname.startsWith('/manage/media')) ? 1 : 0.6,
+                  opacity: (pathname.startsWith('/manage/settings') || pathname.startsWith('/manage/media') || pathname.startsWith('/manage/users') || pathname.startsWith('/manage/groups') || pathname.startsWith('/manage/tasks')) ? 1 : 0.6,
                   transition: 'opacity 0.15s',
                 }}
               >
@@ -259,7 +221,32 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
                         padding: '0.65rem 1rem',
                         background: pathname.startsWith(path) ? 'rgba(255,107,43,0.08)' : 'transparent',
                         border: 'none',
-                        borderBottom: '1px solid rgba(0,0,0,0.06)',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        color: 'var(--navy)',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,107,43,0.1)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = pathname.startsWith(path) ? 'rgba(255,107,43,0.08)' : 'transparent')}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {[
+                    { label: '👥 Users', path: '/manage/users' },
+                    { label: '🏘️ Groups', path: '/manage/groups' },
+                    { label: '✅ Tasks', path: '/manage/tasks' },
+                  ].map(({ label, path }) => (
+                    <button
+                      key={path}
+                      onClick={() => { router.push(path); setMenuOpen(false); }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '0.65rem 1rem',
+                        background: pathname.startsWith(path) ? 'rgba(255,107,43,0.08)' : 'transparent',
+                        border: 'none',
                         fontSize: '0.875rem',
                         fontWeight: 600,
                         color: 'var(--navy)',
@@ -278,9 +265,11 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
         </div>
       </header>
 
-      {/* Page content */}
-      <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-        {children}
+      {/* Page content — only this area scrolls */}
+      <main style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+          {children}
+        </div>
       </main>
     </div>
   );

@@ -3,9 +3,9 @@ import pg from 'pg';
 import { config } from '@constractor/config';
 
 const TEST_USERS = [
-  { email: 'member1@test.com',  password: 'Test1234!', displayName: 'Test Member 1',  role: 'member'  },
-  { email: 'member2@test.com',  password: 'Test1234!', displayName: 'Test Member 2',  role: 'member'  },
-  { email: 'manager1@test.com', password: 'Test1234!', displayName: 'Test Manager 1', role: 'manager' },
+  { email: 'member1@test.com',  password: 'Test1234!', displayName: 'Test Member 1',  role: 'member',  language: 'he' },
+  { email: 'member2@test.com',  password: 'Test1234!', displayName: 'Test Member 2',  role: 'member',  language: 'en' },
+  { email: 'manager1@test.com', password: 'Test1234!', displayName: 'Test Manager 1', role: 'manager', language: 'en' },
 ] as const;
 
 async function seedTestUsers() {
@@ -15,9 +15,9 @@ async function seedTestUsers() {
       const passwordHash = await bcrypt.hash(u.password, 12);
       const result = await pool.query(
         `INSERT INTO users (email, password_hash, display_name, role, language, is_active)
-         VALUES ($1, $2, $3, $4, 'en', true)
-         ON CONFLICT (email) DO NOTHING`,
-        [u.email, passwordHash, u.displayName, u.role],
+         VALUES ($1, $2, $3, $4, $5, true)
+         ON CONFLICT (email) DO UPDATE SET language = EXCLUDED.language`,
+        [u.email, passwordHash, u.displayName, u.role, u.language],
       );
       const created = (result.rowCount ?? 0) > 0;
       console.log(`${created ? '✓ Created' : '— Already exists'}: ${u.role.padEnd(8)} ${u.email}`);

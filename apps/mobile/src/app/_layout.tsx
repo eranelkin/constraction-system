@@ -1,6 +1,8 @@
+import '@/lib/i18n';
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, I18nManager, DevSettings } from 'react-native';
 import { Slot, useRouter } from 'expo-router';
+import i18n from 'i18next';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
 
 export default function RootLayout() {
@@ -11,6 +13,21 @@ export default function RootLayout() {
     void (async () => {
       try {
         const [token, user] = await Promise.all([getAccessToken(), getStoredUser()]);
+
+        if (user?.language) {
+          await i18n.changeLanguage(user.language);
+
+          const shouldBeRTL = user.language === 'he';
+          if (I18nManager.isRTL !== shouldBeRTL) {
+            I18nManager.allowRTL(shouldBeRTL);
+            I18nManager.forceRTL(shouldBeRTL);
+            if (__DEV__) {
+              DevSettings.reload();
+            }
+            return;
+          }
+        }
+
         if (token && user) router.replace('/(home)');
       } finally {
         setChecking(false);
@@ -23,7 +40,7 @@ export default function RootLayout() {
       <Slot />
       {checking && (
         <View style={styles.splash}>
-          <ActivityIndicator size="large" color="#FF6B2B" />
+          <Text style={styles.splashEmoji}>🏗️</Text>
         </View>
       )}
     </View>
@@ -37,5 +54,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFF9E6',
+  },
+  splashEmoji: {
+    fontSize: 80,
   },
 });

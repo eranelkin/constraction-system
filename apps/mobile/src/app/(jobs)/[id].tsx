@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { apiRequest } from '../../lib/api-client';
 import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
 import type {
@@ -35,6 +36,7 @@ const appStatusColors: Record<string, { bg: string; text: string }> = {
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useTranslation();
   const [job, setJob] = useState<JobDetail | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export default function JobDetailScreen() {
       const data = await apiRequest<GetJobResponse>(`/jobs/${id}`, { token: token ?? undefined });
       setJob(data.job);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load job');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('jobs.detail.errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -75,20 +77,20 @@ export default function JobDetailScreen() {
         body: { coverNote: coverNote.trim() },
       });
       setCoverNote('');
-      Alert.alert('Success', 'Application submitted!');
+      Alert.alert(t('common.success'), t('jobs.detail.applySuccess'));
       await loadJob();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to apply');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('jobs.detail.errorApply'));
     } finally {
       setApplying(false);
     }
   }
 
   async function handleHire(applicationId: string, contractorName: string) {
-    Alert.alert('Hire Contractor', `Hire ${contractorName}?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('jobs.detail.hireTitle'), t('jobs.detail.hireMessage', { name: contractorName }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Hire',
+        text: t('jobs.detail.hireConfirm'),
         onPress: async () => {
           try {
             const token = await getAccessToken();
@@ -96,10 +98,10 @@ export default function JobDetailScreen() {
               method: 'POST',
               token: token ?? undefined,
             });
-            Alert.alert('Success', `${contractorName} hired! A conversation has been started.`);
+            Alert.alert(t('common.success'), t('jobs.detail.hireSuccess', { name: contractorName }));
             await loadJob();
           } catch (err) {
-            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to hire');
+            Alert.alert(t('common.error'), err instanceof Error ? err.message : t('jobs.detail.errorHire'));
           }
         },
       },
@@ -117,7 +119,7 @@ export default function JobDetailScreen() {
   if (!job) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Job not found.</Text>
+        <Text style={styles.errorText}>{t('jobs.detail.notFound')}</Text>
       </View>
     );
   }
@@ -145,7 +147,7 @@ export default function JobDetailScreen() {
         <View style={styles.card}>
           {myApp ? (
             <>
-              <Text style={styles.sectionTitle}>Your Application</Text>
+              <Text style={styles.sectionTitle}>{t('jobs.detail.yourApplication')}</Text>
               <Text style={styles.coverNoteText}>{myApp.coverNote}</Text>
               <View style={[styles.appStatusBadge, { backgroundColor: appStatusColors[myApp.status]?.bg ?? '#f1f5f9' }]}>
                 <Text style={[styles.appStatusText, { color: appStatusColors[myApp.status]?.text ?? '#6b7280' }]}>
@@ -155,12 +157,12 @@ export default function JobDetailScreen() {
             </>
           ) : job.status === 'open' ? (
             <>
-              <Text style={styles.sectionTitle}>Apply</Text>
+              <Text style={styles.sectionTitle}>{t('jobs.detail.applyTitle')}</Text>
               <TextInput
                 style={styles.textArea}
                 value={coverNote}
                 onChangeText={setCoverNote}
-                placeholder="Write a short cover note…"
+                placeholder={t('jobs.detail.coverPlaceholder')}
                 multiline
                 numberOfLines={4}
                 maxLength={1000}
@@ -170,11 +172,11 @@ export default function JobDetailScreen() {
                 onPress={() => void handleApply()}
                 disabled={!coverNote.trim() || applying}
               >
-                <Text style={styles.applyBtnText}>{applying ? 'Applying…' : 'Apply'}</Text>
+                <Text style={styles.applyBtnText}>{applying ? t('jobs.detail.applying') : t('jobs.detail.apply')}</Text>
               </TouchableOpacity>
             </>
           ) : (
-            <Text style={styles.closedText}>This job is no longer accepting applications.</Text>
+            <Text style={styles.closedText}>{t('jobs.detail.closedMessage')}</Text>
           )}
         </View>
       )}
@@ -182,9 +184,9 @@ export default function JobDetailScreen() {
       {/* Client: applications list */}
       {role === 'client' && userId && (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Applications ({job.applications.length})</Text>
+          <Text style={styles.sectionTitle}>{t('jobs.detail.applications', { count: job.applications.length })}</Text>
           {job.applications.length === 0 ? (
-            <Text style={styles.emptyText}>No applications yet.</Text>
+            <Text style={styles.emptyText}>{t('jobs.detail.noApplications')}</Text>
           ) : (
             job.applications.map((app) => {
               const appColors = appStatusColors[app.status] ?? { bg: '#f1f5f9', text: '#6b7280' };
@@ -202,7 +204,7 @@ export default function JobDetailScreen() {
                       style={styles.hireBtn}
                       onPress={() => void handleHire(app.id, app.contractorName)}
                     >
-                      <Text style={styles.hireBtnText}>Hire</Text>
+                      <Text style={styles.hireBtnText}>{t('jobs.detail.hireConfirm')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -213,7 +215,7 @@ export default function JobDetailScreen() {
       )}
 
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Text style={styles.backBtnText}>← Back to Jobs</Text>
+        <Text style={styles.backBtnText}>{t('jobs.detail.back')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

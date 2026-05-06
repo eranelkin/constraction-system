@@ -11,6 +11,9 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
+import { I18nManager, DevSettings } from "react-native";
 import { apiRequest } from "@/lib/api-client";
 import { saveSession } from "@/lib/auth/token-storage";
 import { ms } from "@/lib/responsive";
@@ -36,13 +39,14 @@ async function clearMessages() {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function performLogin(loginEmail: string, loginPassword: string) {
     if (!loginEmail || !loginPassword) {
-      Alert.alert("Error", "Please fill in all fields");
+      Alert.alert(t('common.error'), t('auth.login.validationError'));
       return;
     }
     setLoading(true);
@@ -52,10 +56,22 @@ export default function LoginScreen() {
         body: { email: loginEmail, password: loginPassword },
       });
       await saveSession(result.user, result.tokens);
+
+      const lang = result.user.language ?? 'en';
+      await i18n.changeLanguage(lang);
+
+      const shouldBeRTL = lang === 'he';
+      if (I18nManager.isRTL !== shouldBeRTL) {
+        I18nManager.allowRTL(shouldBeRTL);
+        I18nManager.forceRTL(shouldBeRTL);
+        if (__DEV__) DevSettings.reload();
+        return;
+      }
+
       router.replace("/(home)" as never);
     } catch (err) {
       Alert.alert(
-        "Login failed",
+        t('auth.login.errorTitle'),
         err instanceof Error ? err.message : "Unknown error",
       );
     } finally {
@@ -69,10 +85,10 @@ export default function LoginScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Login</Text>
+        <Text style={styles.title}>{t('auth.login.title')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={t('auth.login.emailPlaceholder')}
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -81,7 +97,7 @@ export default function LoginScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder={t('auth.login.passwordPlaceholder')}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -93,16 +109,16 @@ export default function LoginScreen() {
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? "Logging in…" : "Login"}
+            {loading ? t('auth.login.submitting') : t('auth.login.submit')}
           </Text>
         </Pressable>
         <Text style={styles.link}>
-          No account?{" "}
+          {t('auth.login.noAccount')}{" "}
           <Text
             style={styles.linkText}
             onPress={() => router.push("/(auth)/register" as never)}
           >
-            Register
+            {t('auth.login.registerLink')}
           </Text>
         </Text>
 

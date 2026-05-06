@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { apiRequest } from '@/lib/api-client';
 import { saveSession } from '@/lib/auth/token-storage';
 import { ms } from '@/lib/responsive';
@@ -8,6 +9,7 @@ import type { AuthResponseDTO } from '@constractor/types';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -16,7 +18,7 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (!email || !password || !displayName) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('common.error'), t('auth.register.validationError'));
       return;
     }
     setLoading(true);
@@ -28,7 +30,7 @@ export default function RegisterScreen() {
       await saveSession(result.user, result.tokens);
       router.replace('/(home)' as never);
     } catch (err) {
-      Alert.alert('Registration failed', err instanceof Error ? err.message : 'Unknown error');
+      Alert.alert(t('auth.register.errorTitle'), err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -37,17 +39,17 @@ export default function RegisterScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create Account</Text>
+        <Text style={styles.title}>{t('auth.register.title')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="Full name"
+          placeholder={t('auth.register.namePlaceholder')}
           value={displayName}
           onChangeText={setDisplayName}
           autoCapitalize="words"
         />
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={t('auth.register.emailPlaceholder')}
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -56,20 +58,20 @@ export default function RegisterScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder={t('auth.register.passwordPlaceholder')}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="new-password"
         />
-        <Text style={styles.label}>I am a:</Text>
+        <Text style={styles.label}>{t('auth.register.roleLabel')}</Text>
         <View style={styles.roleRow}>
           <Pressable
             style={[styles.roleBtn, role === 'member' && styles.roleBtnActive]}
             onPress={() => setRole('member')}
           >
             <Text style={[styles.roleBtnText, role === 'member' && styles.roleBtnTextActive]}>
-              Worker
+              {t('auth.register.roleWorker')}
             </Text>
           </Pressable>
           <Pressable
@@ -77,17 +79,17 @@ export default function RegisterScreen() {
             onPress={() => setRole('manager')}
           >
             <Text style={[styles.roleBtnText, role === 'manager' && styles.roleBtnTextActive]}>
-              Manager
+              {t('auth.register.roleManager')}
             </Text>
           </Pressable>
         </View>
         <Pressable style={styles.button} onPress={() => void handleRegister()} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
+          <Text style={styles.buttonText}>{loading ? t('auth.register.submitting') : t('auth.register.submit')}</Text>
         </Pressable>
         <Text style={styles.link}>
-          Already have an account?{' '}
+          {t('auth.register.alreadyHaveAccount')}{' '}
           <Text style={styles.linkText} onPress={() => router.back()}>
-            Login
+            {t('auth.register.loginLink')}
           </Text>
         </Text>
       </ScrollView>

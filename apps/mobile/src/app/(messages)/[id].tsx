@@ -17,6 +17,8 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import { ms, s, vs } from '../../lib/responsive';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
@@ -68,15 +70,15 @@ function formatTime(date: Date | string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-function formatDateLabel(date: Date | string): string {
+function formatDateLabel(date: Date | string, todayLabel: string): string {
   const d = new Date(date as string);
   const today = new Date();
   if (
     d.getFullYear() === today.getFullYear() &&
     d.getMonth() === today.getMonth() &&
     d.getDate() === today.getDate()
-  ) return 'Today';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  ) return todayLabel;
+  return d.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function isSameDay(a: Date | string, b: Date | string): boolean {
@@ -89,6 +91,7 @@ function isSameDay(a: Date | string, b: Date | string): boolean {
   );
 }
 
+
 export default function ThreadScreen() {
   const { id, userName, userId: participantId, avatarEmoji, avatarColor, isGroup } = useLocalSearchParams<{
     id: string;
@@ -99,12 +102,14 @@ export default function ThreadScreen() {
     isGroup?: string;
   }>();
 
-  const displayName = userName ?? 'Chat';
+  const { t } = useTranslation();
+  const displayName = userName ?? t('chat.today');
   const emoji = avatarEmoji ?? '💬';
   const color = avatarColor ?? '#FF6B2B';
   const isGroupChat = isGroup === 'true';
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
   const [input, setInput] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   const [userLanguage, setUserLanguage] = useState<string>('en');
@@ -255,7 +260,7 @@ export default function ThreadScreen() {
           );
 
           const isOwn = incoming.senderId === userIdRef.current;
-          if (!isOwn) playMessageSound();
+          if (!isOwn) void playMessageSound();
           if (isOwn || incoming.translatedBody) {
             // Own message or already translated (server cache hit) → show immediately
             setMessages((prev) => {
@@ -301,12 +306,38 @@ export default function ThreadScreen() {
           `/messaging/conversations/${id}/messages`,
           { token },
         );
-        setMessages(data.messages);
-        lastIdRef.current = data.messages.at(-1)?.id;
-        oldestIdRef.current = data.messages[0]?.id;
+
+        // Translate all messages that need it before rendering — prevents the
+        // untranslated→translated flicker. Server caches translations so this
+        // is fast for messages already seen; all requests run in parallel.
+        const myId = userIdRef.current;
+        const myLang = userLanguageRef.current;
+        const loadedMessages = await Promise.all(
+          data.messages.map(async (m) => {
+            if (m.senderId === myId || m.translatedBody || !myLang) return m;
+            translatingSet.current.add(m.id);
+            try {
+              const res = await apiRequest<{ translatedText: string }>('/translate', {
+                method: 'POST',
+                body: { text: m.body, targetLanguage: myLang, messageId: m.id },
+                token,
+              });
+              return { ...m, translatedBody: res.translatedText };
+            } catch {
+              translatingSet.current.delete(m.id);
+              return m;
+            }
+          }),
+        );
+
+        setMessages(loadedMessages);
+        lastIdRef.current = loadedMessages.at(-1)?.id;
+        oldestIdRef.current = loadedMessages[0]?.id;
         setHasMore(data.messages.length === 50);
       } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load messages');
+        Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorLoad'));
+      } finally {
+        setLoadingMessages(false);
       }
     };
 
@@ -330,7 +361,7 @@ export default function ThreadScreen() {
       );
       // Message will arrive via the new_message socket event
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorSend'));
     }
   }
 
@@ -340,7 +371,7 @@ export default function ThreadScreen() {
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        Alert.alert('Permission denied', 'Microphone access is needed for voice messages.');
+        Alert.alert(t('chat.permissionMicTitle'), t('chat.permissionMicVoice'));
         return;
       }
 
@@ -358,7 +389,7 @@ export default function ThreadScreen() {
         setRecordingSecs((s) => s + 1);
       }, 1000);
     } catch (err) {
-      Alert.alert('Error', 'Could not start recording');
+      Alert.alert(t('common.error'), t('chat.couldNotRecord'));
       console.error(err);
     }
   }
@@ -397,7 +428,7 @@ export default function ThreadScreen() {
       setVoiceText(data.text);
       setVoicePhase('editing');
     } catch (err) {
-      Alert.alert('Error', 'Could not transcribe audio. Try again.');
+      Alert.alert(t('common.error'), t('chat.couldNotTranscribe'));
       console.error(err);
       setVoicePhase(null);
     }
@@ -434,7 +465,7 @@ export default function ThreadScreen() {
       );
       // Message will arrive via the new_message socket event
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorSend'));
     }
   }
 
@@ -444,7 +475,7 @@ export default function ThreadScreen() {
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        Alert.alert('Permission denied', 'Microphone access is needed to send voice messages.');
+        Alert.alert(t('chat.permissionMicTitle'), t('chat.permissionMicSend'));
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
@@ -456,7 +487,7 @@ export default function ThreadScreen() {
       setVmPhase('recording');
       vmTimerRef.current = setInterval(() => setVmSecs((x) => x + 1), 1000);
     } catch {
-      Alert.alert('Error', 'Could not start recording');
+      Alert.alert(t('common.error'), t('chat.couldNotRecord'));
     }
   }
 
@@ -550,9 +581,12 @@ export default function ThreadScreen() {
     }
   }
 
-  function playMessageSound() {
+  async function playMessageSound() {
     if (voicePhase !== null) return;
-    void soundRef.current?.replayAsync().catch(() => {});
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      await soundRef.current?.replayAsync();
+    } catch {}
   }
 
   function formatDuration(secs: number) {
@@ -608,7 +642,7 @@ export default function ThreadScreen() {
       if (!nextMsg || !isSameDay(msg.createdAt, nextMsg.createdAt)) {
         const d = new Date(msg.createdAt as unknown as string);
         const key = `sep-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-        result.push({ type: 'separator', label: formatDateLabel(msg.createdAt), key });
+        result.push({ type: 'separator', label: formatDateLabel(msg.createdAt, t('chat.today')), key });
       }
     }
     return result;
@@ -664,7 +698,7 @@ export default function ThreadScreen() {
                     {playingId === msg.id ? '⏹' : '▶'}
                   </Text>
                   <Text style={[styles.audioBubbleLabel, isMe ? styles.bubbleMeText : styles.bubbleThemText]}>
-                    {playingId === msg.id ? 'Playing…' : '🎵 Voice message'}
+                    {playingId === msg.id ? t('chat.voicePlaying') : t('chat.voiceMessage')}
                   </Text>
                 </Pressable>
               ) : msg.videoUrl ? (
@@ -733,10 +767,12 @@ export default function ThreadScreen() {
               : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>👋</Text>
-              <Text style={styles.emptyText}>Say hi to {displayName}!</Text>
-            </View>
+            !loadingMessages ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>👋</Text>
+                <Text style={styles.emptyText}>{t('chat.sayHi', { name: displayName })}</Text>
+              </View>
+            ) : null
           }
         />
 
@@ -764,7 +800,7 @@ export default function ThreadScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder={`Message ${displayName}…`}
+            placeholder={t('chat.messagePlaceholder', { name: displayName })}
             placeholderTextColor="#999"
             multiline
             maxLength={2000}
@@ -801,7 +837,7 @@ export default function ThreadScreen() {
                   </View>
                 </View>
                 <Text style={styles.recordingTimer}>{formatDuration(vmSecs)}</Text>
-                <Text style={styles.recordingHint}>Voice message recording</Text>
+                <Text style={styles.recordingHint}>{t('chat.voiceRecording.voiceMsgRecording')}</Text>
                 <View style={{ flexDirection: 'row', gap: ms(16), marginTop: ms(8) }}>
                   <Pressable style={[styles.circleBtn, styles.cancelBtn]} onPress={() => void cancelVoiceMsg()}>
                     <Text style={styles.circleBtnText}>✕</Text>
@@ -814,7 +850,7 @@ export default function ThreadScreen() {
             ) : (
               <>
                 <ActivityIndicator size="large" color="#4ECDC4" />
-                <Text style={styles.transcribingText}>Sending voice message…</Text>
+                <Text style={styles.transcribingText}>{t('chat.voiceRecording.sendingVoiceMsg')}</Text>
               </>
             )}
           </View>
@@ -835,7 +871,7 @@ export default function ThreadScreen() {
                 </View>
               </View>
               <Text style={styles.recordingTimer}>{formatDuration(recordingSecs)}</Text>
-              <Text style={styles.recordingHint}>Tap to stop</Text>
+              <Text style={styles.recordingHint}>{t('chat.voiceRecording.tapToStop')}</Text>
               <Pressable style={styles.stopRecordBtn} onPress={() => void stopAndTranscribe()}>
                 <View style={styles.stopDot} />
               </Pressable>
@@ -846,7 +882,7 @@ export default function ThreadScreen() {
           {voicePhase === 'transcribing' && (
             <View style={styles.modalContent}>
               <ActivityIndicator size="large" color="#FF6B2B" />
-              <Text style={styles.transcribingText}>Transcribing your voice…</Text>
+              <Text style={styles.transcribingText}>{t('chat.voiceRecording.transcribing')}</Text>
             </View>
           )}
 
@@ -867,19 +903,19 @@ export default function ThreadScreen() {
 
                 {/* Editable transcription */}
                 <Pressable style={styles.transcriptCard} onPress={Keyboard.dismiss}>
-                  <Text style={styles.transcriptLabel}>✏️ Edit your message</Text>
+                  <Text style={styles.transcriptLabel}>{t('chat.voiceRecording.editLabel')}</Text>
                   <TextInput
                     style={styles.transcriptInput}
                     value={voiceText}
                     onChangeText={setVoiceText}
                     multiline
                     autoFocus
-                    placeholder="Transcribed text will appear here…"
+                    placeholder={t('chat.voiceRecording.editPlaceholder')}
                     placeholderTextColor="#AAA"
                     returnKeyType="done"
                     blurOnSubmit
                   />
-                  <Text style={styles.keyboardHint}>Tap outside to close keyboard</Text>
+                  <Text style={styles.keyboardHint}>{t('chat.voiceRecording.keyboardHint')}</Text>
                 </Pressable>
 
                 {/* Send button */}
@@ -1022,6 +1058,7 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: vs(60), gap: ms(10) },
   emptyEmoji: { fontSize: ms(48) },
   emptyText: { fontSize: ms(15), fontWeight: '700', color: '#888' },
+
 
   // Input bar
   inputRow: {

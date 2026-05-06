@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -25,14 +26,16 @@ import type { FieldReportType } from '@constractor/types';
 
 const PROJECTS = ['Downtown Tower', 'Harbor Bridge', 'Riverside Complex', 'Metro Station'];
 
-const TYPES: { value: FieldReportType; label: string; emoji: string }[] = [
-  { value: 'progress', label: 'Progress', emoji: '📈' },
-  { value: 'issue',    label: 'Issue',    emoji: '⚠️' },
-  { value: 'delay',    label: 'Delay',    emoji: '⏰' },
-  { value: 'safety',   label: 'Safety',   emoji: '🦺' },
-];
-
 export default function ReportNewScreen() {
+  const { t } = useTranslation();
+
+  const TYPES = useMemo((): { value: FieldReportType; label: string; emoji: string }[] => [
+    { value: 'progress', label: t('report.types.progress'), emoji: '📈' },
+    { value: 'issue',    label: t('report.types.issue'),    emoji: '⚠️' },
+    { value: 'delay',    label: t('report.types.delay'),    emoji: '⏰' },
+    { value: 'safety',   label: t('report.types.safety'),   emoji: '🦺' },
+  ], [t]);
+
   const [photo, setPhoto] = useState<{ base64: string; uri: string } | null>(null);
   const [description, setDescription] = useState('');
   const [type, setType] = useState<FieldReportType>('progress');
@@ -46,7 +49,7 @@ export default function ReportNewScreen() {
   async function handleTakePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission denied', 'Camera access is needed to take photos.');
+      Alert.alert(t('report.permissionDeniedTitle'), t('report.permissionCamera'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -66,7 +69,7 @@ export default function ReportNewScreen() {
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        Alert.alert('Permission denied', 'Microphone access is needed for voice notes.');
+        Alert.alert(t('report.permissionDeniedTitle'), t('report.permissionMic'));
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
@@ -76,7 +79,7 @@ export default function ReportNewScreen() {
       recordingRef.current = recording;
       setIsRecording(true);
     } catch {
-      Alert.alert('Error', 'Could not start recording');
+      Alert.alert(t('common.error'), t('report.couldNotRecord'));
     }
   }
 
@@ -102,7 +105,7 @@ export default function ReportNewScreen() {
       });
       setDescription(data.text);
     } catch {
-      Alert.alert('Error', 'Could not transcribe audio. Try again.');
+      Alert.alert(t('common.error'), t('report.couldNotTranscribe'));
     } finally {
       setIsTranscribing(false);
     }
@@ -110,11 +113,11 @@ export default function ReportNewScreen() {
 
   async function handleSubmit() {
     if (!location.trim()) {
-      Alert.alert('Missing field', 'Please enter a location.');
+      Alert.alert(t('report.missingField'), t('report.errorMissingLocation'));
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Missing field', 'Please add a description or record a voice note.');
+      Alert.alert(t('report.missingField'), t('report.errorMissingDescription'));
       return;
     }
     setIsSubmitting(true);
@@ -142,7 +145,7 @@ export default function ReportNewScreen() {
       });
       router.back();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit report');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('report.errorSubmit'));
     } finally {
       setIsSubmitting(false);
     }
@@ -160,7 +163,7 @@ export default function ReportNewScreen() {
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Text style={styles.closeBtnText}>✕</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>New Report</Text>
+          <Text style={styles.headerTitle}>{t('report.header')}</Text>
           <View style={{ width: s(36) }} />
         </View>
 
@@ -176,14 +179,14 @@ export default function ReportNewScreen() {
             ) : (
               <View style={styles.photoPlaceholder}>
                 <Text style={styles.photoIcon}>📷</Text>
-                <Text style={styles.photoHint}>Tap to take photo</Text>
+                <Text style={styles.photoHint}>{t('report.photoHint')}</Text>
               </View>
             )}
           </Pressable>
 
           {/* Voice + Description */}
           <View style={styles.section}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('report.descriptionLabel')}</Text>
             <Pressable
               style={[styles.micBtn, isRecording && styles.micBtnActive]}
               onPressIn={() => void startRecording()}
@@ -197,17 +200,17 @@ export default function ReportNewScreen() {
               )}
               <Text style={styles.micText}>
                 {isTranscribing
-                  ? 'Transcribing…'
+                  ? t('report.voiceTranscribing')
                   : isRecording
-                    ? 'Release to transcribe'
-                    : 'Hold to record voice note'}
+                    ? t('report.voiceRelease')
+                    : t('report.voiceHold')}
               </Text>
             </Pressable>
             <TextInput
               style={styles.textArea}
               value={description}
               onChangeText={setDescription}
-              placeholder="Describe the situation…"
+              placeholder={t('report.descriptionPlaceholder')}
               placeholderTextColor="#aaa"
               multiline
               numberOfLines={3}
@@ -217,7 +220,7 @@ export default function ReportNewScreen() {
 
           {/* Type */}
           <View style={styles.section}>
-            <Text style={styles.label}>Type</Text>
+            <Text style={styles.label}>{t('report.typeLabel')}</Text>
             <View style={styles.chipRow}>
               {TYPES.map((t) => (
                 <Pressable
@@ -235,7 +238,7 @@ export default function ReportNewScreen() {
 
           {/* Project */}
           <View style={styles.section}>
-            <Text style={styles.label}>Project</Text>
+            <Text style={styles.label}>{t('report.projectLabel')}</Text>
             <View style={styles.chipRow}>
               {PROJECTS.map((p) => (
                 <Pressable
@@ -256,12 +259,12 @@ export default function ReportNewScreen() {
 
           {/* Location */}
           <View style={styles.section}>
-            <Text style={styles.label}>Location</Text>
+            <Text style={styles.label}>{t('report.locationLabel')}</Text>
             <TextInput
               style={styles.input}
               value={location}
               onChangeText={setLocation}
-              placeholder="e.g. Floor 3, Grid C5"
+              placeholder={t('report.locationPlaceholder')}
               placeholderTextColor="#aaa"
             />
           </View>
@@ -278,7 +281,7 @@ export default function ReportNewScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitText}>Submit Report</Text>
+              <Text style={styles.submitText}>{t('report.submit')}</Text>
             )}
           </Pressable>
 

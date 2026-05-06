@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { useTranslation } from "react-i18next";
 import {
   getAccessToken,
   getStoredUser,
@@ -143,6 +144,7 @@ type ListItem =
   | { kind: "group"; group: PublicGroup };
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("msg");
   const [fabOpen, setFabOpen] = useState(false);
   const [users, setUsers] = useState<ContactUser[]>([]);
@@ -219,7 +221,7 @@ export default function HomeScreen() {
       setContactUnread(newContactUnread);
       setGroupUnread(newGroupUnread);
     } catch {
-      if (!silent) Alert.alert("Error", "Could not load messages");
+      if (!silent) Alert.alert(t('common.error'), t('home.errorLoad'));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -259,10 +261,10 @@ export default function HomeScreen() {
   );
 
   function handleLogout() {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t('home.logout.title'), t('home.logout.message'), [
+      { text: t('home.logout.cancel'), style: "cancel" },
       {
-        text: "Logout",
+        text: t('home.logout.confirm'),
         style: "destructive",
         onPress: () => {
           void clearSession().then(() =>
@@ -296,7 +298,7 @@ export default function HomeScreen() {
         },
       } as never);
     } catch {
-      Alert.alert("Error", "Could not open chat");
+      Alert.alert(t('common.error'), t('home.errorOpenChat'));
     } finally {
       setStarting(null);
     }
@@ -304,7 +306,7 @@ export default function HomeScreen() {
 
   function openGroup(group: PublicGroup) {
     if (!group.conversationId) {
-      Alert.alert("Error", "This group has no conversation yet");
+      Alert.alert(t('common.error'), t('home.errorNoConversation'));
       return;
     }
     router.push({
@@ -321,13 +323,13 @@ export default function HomeScreen() {
 
   const listData: ListItem[] = [];
   if (users.length > 0) {
-    listData.push({ kind: "header", title: "💬 Direct Messages" });
+    listData.push({ kind: "header", title: t('home.sections.directMessages') });
     users.forEach((user, index) =>
       listData.push({ kind: "contact", user, index }),
     );
   }
   if (groups.length > 0) {
-    listData.push({ kind: "header", title: "🏘️ Groups" });
+    listData.push({ kind: "header", title: t('home.sections.groups') });
     groups.forEach((group) => listData.push({ kind: "group", group }));
   }
 
@@ -338,7 +340,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          🏗️ Constractor
+          {t('home.title')}
         </Text>
         <View style={styles.headerRight}>
           {me && (
@@ -372,7 +374,7 @@ export default function HomeScreen() {
           onPress={() => setTab("msg")}
         >
           <Text style={[styles.tabText, tab === "msg" && styles.tabTextActive]}>
-            💬 Chats
+            {t('home.tabs.chats')}
           </Text>
         </Pressable>
         <Pressable
@@ -382,7 +384,7 @@ export default function HomeScreen() {
           <Text
             style={[styles.tabText, tab === "tasks" && styles.tabTextActive]}
           >
-            ✅ Tasks
+            {t('home.tabs.tasks')}
           </Text>
         </Pressable>
       </View>
@@ -392,7 +394,7 @@ export default function HomeScreen() {
         loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#FF6B2B" />
-            <Text style={styles.loadingText}>Loading…</Text>
+            <Text style={styles.loadingText}>{t('common.loading')}</Text>
           </View>
         ) : (
           <FlatList
@@ -434,10 +436,10 @@ export default function HomeScreen() {
                       </Text>
                       <Text style={styles.cardSub} numberOfLines={1}>
                         {item.user.role === "manager"
-                          ? "👔 Manager"
+                          ? t('home.roles.manager')
                           : item.user.role === "admin"
-                            ? "⭐ Admin"
-                            : "👷 Worker"}
+                            ? t('home.roles.admin')
+                            : t('home.roles.worker')}
                       </Text>
                     </View>
                     {isLoading ? (
@@ -473,7 +475,7 @@ export default function HomeScreen() {
                       {g.name}
                     </Text>
                     <Text style={styles.cardSub} numberOfLines={1}>
-                      👥 {g.memberCount} member{g.memberCount !== 1 ? "s" : ""}
+                      {t('home.membersCount', { count: g.memberCount })}
                     </Text>
                     {g.description ? (
                       <Text style={styles.cardDesc} numberOfLines={1}>
@@ -495,10 +497,8 @@ export default function HomeScreen() {
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>👥</Text>
-                <Text style={styles.emptyTitle}>No teammates yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Your team will appear here
-                </Text>
+                <Text style={styles.emptyTitle}>{t('home.empty.title')}</Text>
+                <Text style={styles.emptySubtitle}>{t('home.empty.subtitle')}</Text>
               </View>
             }
           />
@@ -507,8 +507,8 @@ export default function HomeScreen() {
         <View style={styles.comingSoon}>
           <View style={styles.comingSoonCard}>
             <Text style={styles.comingSoonEmoji}>🚧</Text>
-            <Text style={styles.comingSoonTitle}>Tasks</Text>
-            <Text style={styles.comingSoonSub}>Coming soon!</Text>
+            <Text style={styles.comingSoonTitle}>{t('home.tasks.title')}</Text>
+            <Text style={styles.comingSoonSub}>{t('home.tasks.comingSoon')}</Text>
           </View>
         </View>
       )}
@@ -543,28 +543,28 @@ export default function HomeScreen() {
           >
             <Text style={styles.sheetItemEmoji}>📋</Text>
             <View>
-              <Text style={styles.sheetItemTitle}>New Report</Text>
-              <Text style={styles.sheetItemSub}>Field progress, issue, delay or safety</Text>
+              <Text style={styles.sheetItemTitle}>{t('home.fab.newReport')}</Text>
+              <Text style={styles.sheetItemSub}>{t('home.fab.newReportSub')}</Text>
             </View>
           </Pressable>
           <Pressable
             style={[styles.sheetItem, styles.sheetItemDisabled]}
             onPress={() => {
               setFabOpen(false);
-              Alert.alert('Coming soon', 'Task creation is coming in a future update.');
+              Alert.alert(t('home.fab.taskComingSoonTitle'), t('home.fab.taskComingSoonMessage'));
             }}
           >
             <Text style={styles.sheetItemEmoji}>✅</Text>
             <View>
-              <Text style={[styles.sheetItemTitle, { color: '#aaa' }]}>New Task</Text>
-              <Text style={styles.sheetItemSub}>Coming soon</Text>
+              <Text style={[styles.sheetItemTitle, { color: '#aaa' }]}>{t('home.fab.newTask')}</Text>
+              <Text style={styles.sheetItemSub}>{t('home.fab.newTaskSub')}</Text>
             </View>
           </Pressable>
           <Pressable
             style={styles.sheetCancel}
             onPress={() => setFabOpen(false)}
           >
-            <Text style={styles.sheetCancelText}>Cancel</Text>
+            <Text style={styles.sheetCancelText}>{t('home.fab.cancel')}</Text>
           </Pressable>
         </View>
       </Modal>

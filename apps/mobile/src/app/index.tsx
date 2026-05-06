@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Link, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
 import { ms } from '@/lib/responsive';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     void (async () => {
@@ -17,16 +19,16 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Constractor</Text>
-      <Text style={styles.subtitle}>Contractor management platform</Text>
+      <Text style={styles.subtitle}>{t('landing.subtitle')}</Text>
       <View style={styles.nav}>
         <Link href="/(auth)/login" asChild>
           <Pressable style={styles.button}>
-            <Text style={styles.buttonText}>Login</Text>
+            <Text style={styles.buttonText}>{t('landing.login')}</Text>
           </Pressable>
         </Link>
         <Link href="/(auth)/register" asChild>
           <Pressable style={[styles.button, styles.buttonSecondary]}>
-            <Text style={styles.buttonText}>Register</Text>
+            <Text style={styles.buttonText}>{t('landing.register')}</Text>
           </Pressable>
         </Link>
       </View>
