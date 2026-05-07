@@ -10,4 +10,10 @@ export interface MediaFile {
   entityType: string | null;
   entityId: string | null;
   createdAt: Date;
+  recipientType: 'group' | 'direct' | null;
+  groupId: string | null;
+  groupName: string | null;
+  groupEmoji: string | null;
+  recipientUserId: string | null;
+  recipientUserName: string | null;
 }

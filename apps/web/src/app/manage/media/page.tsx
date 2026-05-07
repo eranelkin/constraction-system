@@ -231,6 +231,7 @@ export default function MediaFilesPage() {
                   {tab === 'videos' ? 'Preview' : 'File'}
                 </th>
                 <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700 }}>Uploader</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700 }}>Sent To</th>
                 <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700 }}>Size</th>
                 <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700 }}>Date</th>
                 <th style={{ padding: '0.75rem 1rem', width: 48 }} />
@@ -281,6 +282,19 @@ export default function MediaFilesPage() {
                       )}
                     </td>
                     <td style={{ padding: '0.65rem 1rem', color: '#555' }}>{file.uploaderName}</td>
+                    <td style={{ padding: '0.65rem 1rem' }}>
+                      {file.recipientType === 'group' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(28,28,46,0.07)', borderRadius: 6, padding: '0.2rem 0.55rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy)' }}>
+                          {file.groupEmoji ?? '👥'} {file.groupName}
+                        </span>
+                      ) : file.recipientType === 'direct' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(255,107,43,0.09)', borderRadius: 6, padding: '0.2rem 0.55rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy)' }}>
+                          👤 {file.recipientUserName}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#bbb', fontSize: '0.85rem' }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: '0.65rem 1rem', color: '#555' }}>
                       {file.sizeBytes != null ? formatBytes(file.sizeBytes) : '—'}
                     </td>

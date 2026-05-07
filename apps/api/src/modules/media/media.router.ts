@@ -72,10 +72,43 @@ export function createMediaRouter(container: AppContainer): Router {
         entity_type: string | null;
         entity_id: string | null;
         created_at: Date;
+        recipient_type: 'group' | 'direct' | null;
+        group_id: string | null;
+        group_name: string | null;
+        group_emoji: string | null;
+        recipient_user_id: string | null;
+        recipient_user_name: string | null;
       }>(
-        `SELECT mf.*, u.display_name AS uploader_name
+        `SELECT
+           mf.id, mf.storage_key, mf.url, mf.mime_type, mf.size_bytes,
+           mf.duration_secs, mf.uploaded_by, mf.entity_type, mf.entity_id, mf.created_at,
+           u.display_name AS uploader_name,
+           CASE
+             WHEN g.id IS NOT NULL THEN 'group'
+             WHEN msg.conversation_id IS NOT NULL THEN 'direct'
+             ELSE NULL
+           END AS recipient_type,
+           g.id   AS group_id,
+           g.name AS group_name,
+           g.emoji AS group_emoji,
+           r.id           AS recipient_user_id,
+           r.display_name AS recipient_user_name
          FROM media_files mf
          JOIN users u ON u.id = mf.uploaded_by
+         LEFT JOIN LATERAL (
+           SELECT conversation_id FROM messages
+           WHERE video_url = mf.url OR audio_url = mf.url
+           LIMIT 1
+         ) msg ON true
+         LEFT JOIN groups g ON g.conversation_id = msg.conversation_id
+         LEFT JOIN LATERAL (
+           SELECT cp.user_id FROM conversation_participants cp
+           WHERE cp.conversation_id = msg.conversation_id
+             AND cp.user_id != mf.uploaded_by
+             AND g.id IS NULL
+           LIMIT 1
+         ) cp ON true
+         LEFT JOIN users r ON r.id = cp.user_id
          ORDER BY mf.created_at DESC`,
         [],
       );
@@ -92,6 +125,12 @@ export function createMediaRouter(container: AppContainer): Router {
         entityType: r.entity_type,
         entityId: r.entity_id,
         createdAt: r.created_at,
+        recipientType: r.recipient_type,
+        groupId: r.group_id,
+        groupName: r.group_name,
+        groupEmoji: r.group_emoji,
+        recipientUserId: r.recipient_user_id,
+        recipientUserName: r.recipient_user_name,
       }));
 
       res.json({ files });
