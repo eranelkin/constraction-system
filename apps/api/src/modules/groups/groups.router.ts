@@ -12,7 +12,7 @@ import {
 
 export function createGroupsRouter(container: AppContainer): Router {
   const router = Router();
-  const { groupRepository, conversationRepository } = container;
+  const { groupRepository, conversationRepository, realtimeProvider } = container;
   const authenticate = createAuthMiddleware(container.authProvider);
 
   router.use(authenticate);
@@ -132,11 +132,13 @@ export function createGroupsRouter(container: AppContainer): Router {
         for (const uid of afterIds) {
           if (!beforeIds.has(uid)) {
             await conversationRepository.addParticipant(group.conversationId, uid);
+            void realtimeProvider.emit(`user:${uid}`, 'user_updated', { groupsChanged: true });
           }
         }
         for (const uid of beforeIds) {
           if (!afterIds.has(uid)) {
             await conversationRepository.removeParticipant(group.conversationId, uid);
+            void realtimeProvider.emit(`user:${uid}`, 'user_updated', { groupsChanged: true });
           }
         }
       }
@@ -164,6 +166,8 @@ export function createGroupsRouter(container: AppContainer): Router {
         await conversationRepository.addParticipant(group.conversationId, userId);
       }
 
+      void realtimeProvider.emit(`user:${userId}`, 'user_updated', { groupsChanged: true });
+
       res.json({ group });
     } catch (err) { next(err); }
   });
@@ -180,6 +184,8 @@ export function createGroupsRouter(container: AppContainer): Router {
       if (group.conversationId) {
         await conversationRepository.removeParticipant(group.conversationId, userId);
       }
+
+      void realtimeProvider.emit(`user:${userId}`, 'user_updated', { groupsChanged: true });
 
       res.json({ group });
     } catch (err) { next(err); }
@@ -215,6 +221,12 @@ export function createGroupsRouter(container: AppContainer): Router {
             await conversationRepository.removeParticipant(g.conversationId, userId);
           }
         }
+      }
+
+      const membershipChanged = beforeIds.size !== afterIds.size ||
+        [...beforeIds].some((id) => !afterIds.has(id));
+      if (membershipChanged) {
+        void realtimeProvider.emit(`user:${userId}`, 'user_updated', { groupsChanged: true });
       }
 
       res.status(204).send();

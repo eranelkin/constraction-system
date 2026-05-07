@@ -6,7 +6,7 @@ import { startConversationSchema, sendMessageSchema, messagesQuerySchema } from 
 
 export function createMessagingRouter(container: AppContainer): Router {
   const router = Router();
-  const { authProvider, conversationRepository, messageRepository, realtimeProvider } = container;
+  const { authProvider, conversationRepository, messageRepository, realtimeProvider, userRepository } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
   router.use(authenticate);
@@ -70,11 +70,15 @@ export function createMessagingRouter(container: AppContainer): Router {
 
       const { body, audioUrl, videoUrl } = sendMessageSchema.parse(req.body);
 
-      if (audioUrl !== undefined && !req.user!.canSendVoice) {
-        throw new AppError('No permission to send voice messages', 403);
-      }
-      if (videoUrl !== undefined && !req.user!.canSendVideo) {
-        throw new AppError('No permission to send video messages', 403);
+      if (audioUrl !== undefined || videoUrl !== undefined) {
+        // Re-check from DB — JWT permissions can be stale after an admin update
+        const dbUser = await userRepository.findById(req.user!.id);
+        if (audioUrl !== undefined && !dbUser?.canSendVoice) {
+          throw new AppError('No permission to send voice messages', 403);
+        }
+        if (videoUrl !== undefined && !dbUser?.canSendVideo) {
+          throw new AppError('No permission to send video messages', 403);
+        }
       }
 
       const createOptions: { audioUrl?: string; videoUrl?: string } = {};

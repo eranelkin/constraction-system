@@ -10,7 +10,7 @@ const patchSettingsSchema = z.object({
 
 export function createSettingsRouter(container: AppContainer): Router {
   const router = Router();
-  const { authProvider, db } = container;
+  const { authProvider, db, realtimeProvider, userRepository } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
   router.use(authenticate);
@@ -59,10 +59,17 @@ export function createSettingsRouter(container: AppContainer): Router {
         [],
       );
       const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-      res.json({
+      const updated = {
         videoMaxDurationSeconds: parseInt(map['video_max_duration_seconds'] ?? '12', 10),
         videoQuality: parseFloat(map['video_quality'] ?? '0.4'),
-      });
+      };
+
+      const users = await userRepository.listAllFull();
+      for (const u of users) {
+        void realtimeProvider.emit(`user:${u.id}`, 'settings_updated', updated);
+      }
+
+      res.json(updated);
     } catch (err) {
       next(err);
     }

@@ -255,11 +255,15 @@ export default function HomeScreen() {
         sock.on("conversation_updated", () => {
           void loadData(meRef.current?.id, true);
         });
+        sock.on("user_updated", () => {
+          void loadData(meRef.current?.id);
+        });
       })();
 
       return () => {
         clearTimeout(timer);
         getSocket()?.off("conversation_updated");
+        getSocket()?.off("user_updated");
       };
     }, [loadData]),
   );

@@ -31,6 +31,12 @@ export async function getStoredUser(): Promise<AuthUser | null> {
   }
 }
 
+export async function updateStoredUser(updates: Partial<AuthUser>): Promise<void> {
+  const current = await getStoredUser();
+  if (!current) return;
+  await SecureStore.setItemAsync(USER_KEY, JSON.stringify({ ...current, ...updates }));
+}
+
 export async function clearSession(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_KEY),

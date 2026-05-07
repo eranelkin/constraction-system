@@ -55,7 +55,7 @@ import { Audio, Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { apiRequest, uploadFile } from '../../lib/api-client';
 import { VideoRecorderModal } from './VideoRecorderModal';
-import { getAccessToken, getStoredUser } from '../../lib/auth/token-storage';
+import { getAccessToken, getStoredUser, updateStoredUser } from '../../lib/auth/token-storage';
 import { connectSocket, getSocket } from '../../lib/socket';
 import type { ListMessagesResponse, Message, PlatformSettings } from '@constractor/types';
 import * as FileSystem from 'expo-file-system';
@@ -240,6 +240,32 @@ export default function ThreadScreen() {
       };
     }, [id, fetchToken]),
   );
+
+  // Subscribe to live permission changes from admin
+  useEffect(() => {
+    void (async () => {
+      const token = await fetchToken();
+      if (!token) return;
+      const sock = connectSocket(token);
+      sock.on('user_updated', (payload: { canSendVoice?: boolean; canSendVideo?: boolean }) => {
+        if (payload.canSendVoice !== undefined) setCanSendVoice(payload.canSendVoice);
+        if (payload.canSendVideo !== undefined) setCanSendVideo(payload.canSendVideo);
+        const permUpdates: { canSendVoice?: boolean; canSendVideo?: boolean } = {};
+        if (payload.canSendVoice !== undefined) permUpdates.canSendVoice = payload.canSendVoice;
+        if (payload.canSendVideo !== undefined) permUpdates.canSendVideo = payload.canSendVideo;
+        if (Object.keys(permUpdates).length > 0) void updateStoredUser(permUpdates);
+      });
+      sock.on('settings_updated', (payload: { videoMaxDurationSeconds?: number; videoQuality?: number }) => {
+        if (payload.videoMaxDurationSeconds !== undefined) setVideoMaxDuration(payload.videoMaxDurationSeconds);
+        if (payload.videoQuality !== undefined) setVideoQuality(payload.videoQuality);
+      });
+    })();
+
+    return () => {
+      getSocket()?.off('user_updated');
+      getSocket()?.off('settings_updated');
+    };
+  }, [fetchToken]);
 
   // Load messages + subscribe to realtime updates
   useEffect(() => {

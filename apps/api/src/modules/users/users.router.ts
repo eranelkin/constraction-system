@@ -10,7 +10,7 @@ const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gi
 
 export function createUsersRouter(container: AppContainer): Router {
   const router = Router();
-  const { authProvider, userRepository } = container;
+  const { authProvider, userRepository, realtimeProvider } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
   // ── Public: serve avatar (no auth — profile pictures are not sensitive) ──
@@ -125,6 +125,16 @@ export function createUsersRouter(container: AppContainer): Router {
       const hasAvatar = updateData.avatarData !== undefined
         ? updateData.avatarData !== null
         : (await userRepository.getAvatar(id)) !== null;
+
+      void realtimeProvider.emit(`user:${id}`, 'user_updated', {
+        userId: updated.id,
+        displayName: updated.displayName,
+        role: updated.role,
+        language: updated.language,
+        canSendVoice: updated.canSendVoice,
+        canSendVideo: updated.canSendVideo,
+        hasAvatar,
+      });
 
       res.json({ user: { ...publicUser, hasAvatar } });
     } catch (err) {
