@@ -1,14 +1,31 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import type { AppContainer } from '../../container.js';
 import { registerSchema, loginSchema, refreshSchema, logoutSchema } from './auth.schema.js';
 import { createAuthMiddleware } from './auth.middleware.js';
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later.' },
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later.' },
+});
 
 export function createAuthRouter(container: AppContainer): Router {
   const router = Router();
   const { authProvider, userRepository } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
-  router.post('/register', async (req, res, next) => {
+  router.post('/register', strictLimiter, async (req, res, next) => {
     try {
       const body = registerSchema.parse(req.body);
       const result = await authProvider.signUp(body);
@@ -18,7 +35,7 @@ export function createAuthRouter(container: AppContainer): Router {
     }
   });
 
-  router.post('/login', async (req, res, next) => {
+  router.post('/login', strictLimiter, async (req, res, next) => {
     try {
       const body = loginSchema.parse(req.body);
       const result = await authProvider.signIn(body);
@@ -28,7 +45,7 @@ export function createAuthRouter(container: AppContainer): Router {
     }
   });
 
-  router.post('/refresh', async (req, res, next) => {
+  router.post('/refresh', refreshLimiter, async (req, res, next) => {
     try {
       const { refreshToken } = refreshSchema.parse(req.body);
       const tokens = await authProvider.refresh(refreshToken);

@@ -120,8 +120,8 @@ export default function MediaFilesPage() {
         a.download = fileName(file.storageKey);
         a.click();
         URL.revokeObjectURL(a.href);
-      } catch {
-        // skip files that fail to download
+      } catch (err) {
+        console.error('[media] download failed for file:', err);
       }
     }
     setDownloading(false);

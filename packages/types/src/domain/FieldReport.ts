@@ -9,8 +9,7 @@ export interface FieldReport {
   description: string;
   status: FieldReportStatus;
   reportedBy: string;
-  photoBase64: string | null;
-  photoMimeType: string | null;
+  photoUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,8 +24,7 @@ export type CreateFieldReportDTO = {
   location: string;
   description: string;
   reportedBy: string;
-  photoBase64?: string;
-  photoMimeType?: string;
+  photoUrl?: string;
 };
 
 export type UpdateFieldReportDTO = {

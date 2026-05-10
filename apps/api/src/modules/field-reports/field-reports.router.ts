@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { AppContainer } from '../../container.js';
 import { createAuthMiddleware, requireRole } from '../auth/auth.middleware.js';
@@ -6,7 +7,7 @@ import { createFieldReportSchema, updateFieldReportSchema, listQuerySchema } fro
 
 export function createFieldReportsRouter(container: AppContainer): Router {
   const router = Router();
-  const { fieldReportRepository } = container;
+  const { fieldReportRepository, storageProvider } = container;
   const authenticate = createAuthMiddleware(container.authProvider);
 
   router.use(authenticate);
@@ -36,6 +37,17 @@ export function createFieldReportsRouter(container: AppContainer): Router {
   router.post('/', async (req, res, next) => {
     try {
       const data = createFieldReportSchema.parse(req.body);
+
+      let photoUrl: string | undefined;
+      if (data.photoBase64 !== undefined) {
+        const mimeType = data.photoMimeType ?? 'image/jpeg';
+        const ext = mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg';
+        const key = `field-reports/${randomUUID()}${ext}`;
+        const buffer = Buffer.from(data.photoBase64, 'base64');
+        const result = await storageProvider.upload(key, buffer, { contentType: mimeType });
+        photoUrl = result.url;
+      }
+
       const createData: Parameters<typeof fieldReportRepository.create>[0] = {
         type: data.type,
         project: data.project,
@@ -43,8 +55,7 @@ export function createFieldReportsRouter(container: AppContainer): Router {
         description: data.description,
         reportedBy: req.user!.id,
       };
-      if (data.photoBase64   !== undefined) createData.photoBase64   = data.photoBase64;
-      if (data.photoMimeType !== undefined) createData.photoMimeType = data.photoMimeType;
+      if (photoUrl !== undefined) createData.photoUrl = photoUrl;
       const report = await fieldReportRepository.create(createData);
       res.status(201).json({ report });
     } catch (err) { next(err); }

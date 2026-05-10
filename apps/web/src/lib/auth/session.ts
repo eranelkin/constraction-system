@@ -1,24 +1,17 @@
-import type { AuthUser, AuthTokens } from '@constractor/types';
+import type { AuthUser } from '@constractor/types';
 
 const ACCESS_KEY = 'access_token';
-const REFRESH_KEY = 'refresh_token';
 const USER_KEY = 'auth_user';
 
-export function saveSession(user: AuthUser, tokens: AuthTokens): void {
+export function saveSession(user: AuthUser, accessToken: string): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(ACCESS_KEY, tokens.accessToken);
-  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+  sessionStorage.setItem(ACCESS_KEY, accessToken);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   return sessionStorage.getItem(ACCESS_KEY);
-}
-
-export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_KEY);
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -32,15 +25,13 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
-export function updateTokens(tokens: AuthTokens): void {
+export function updateAccessToken(accessToken: string): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(ACCESS_KEY, tokens.accessToken);
-  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+  sessionStorage.setItem(ACCESS_KEY, accessToken);
 }
 
 export function clearSession(): void {
   if (typeof window === 'undefined') return;
   sessionStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
 }

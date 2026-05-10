@@ -77,21 +77,24 @@ Each file is numbered sequentially (e.g. `007_user_is_active.sql`). The migratio
 
 ## Migration history
 
-| File | What it does |
-|---|---|
-| `001_initial.sql` | `users` and `refresh_tokens` tables |
-| `002_messages.sql` | `messages` table |
-| `003_jobs.sql` | `jobs` table |
-| `004_rename_roles_and_seed.sql` | Renames roles: client → manager, contractor → member |
-| `005_user_language_avatar.sql` | Adds `language`, `avatar_data`, `avatar_mime_type` to `users` |
-| `006_groups.sql` | `groups` and `group_members` tables |
-| `007_user_is_active.sql` | Adds `is_active BOOLEAN NOT NULL DEFAULT true` to `users` |
-| `008_message_translations.sql` | `message_translations(message_id, language, translated_body)` — server-side translation cache |
-| `009_construction.sql` | `field_reports`, `schedule_tasks`, `rfis` tables + `rfi_number_seq` sequence |
-| `010_rfi_project.sql` | Adds `project VARCHAR(200)` column to `rfis` |
-| `011_field_report_photo.sql` | Adds `photo_base64 TEXT` and `photo_mime_type VARCHAR(50)` to `field_reports` |
-| `012_media_infrastructure.sql` | Creates `media_files` table (generic file tracking) and `settings` key-value table with seed values for video config |
-| `013_message_media.sql` | Adds `audio_url TEXT` and `video_url TEXT` columns to `messages` |
-| `014_user_media_permissions.sql` | Adds `can_send_voice` and `can_send_video` boolean columns to `users`; grants both to existing admins |
-| `015_entity_media.sql` | Adds `audio_url`/`video_url` columns to `field_reports` and `rfis` (for future use) |
-| `016_message_body_optional.sql` | Drops `messages_body_check` and replaces it to allow empty `body` when `audio_url` or `video_url` is present |
+| File                             | What it does                                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `001_initial.sql`                | `users` and `refresh_tokens` tables                                                                                  |
+| `002_messages.sql`               | `messages` table                                                                                                     |
+| `003_jobs.sql`                   | `jobs` table                                                                                                         |
+| `004_rename_roles_and_seed.sql`  | Renames roles: client → manager, contractor → member                                                                 |
+| `005_user_language_avatar.sql`   | Adds `language`, `avatar_data`, `avatar_mime_type` to `users`                                                        |
+| `006_groups.sql`                 | `groups` and `group_members` tables                                                                                  |
+| `007_user_is_active.sql`         | Adds `is_active BOOLEAN NOT NULL DEFAULT true` to `users`                                                            |
+| `008_message_translations.sql`   | `message_translations(message_id, language, translated_body)` — server-side translation cache                        |
+| `009_construction.sql`           | `field_reports`, `schedule_tasks`, `rfis` tables + `rfi_number_seq` sequence                                         |
+| `010_rfi_project.sql`            | Adds `project VARCHAR(200)` column to `rfis`                                                                         |
+| `011_field_report_photo.sql`     | Adds `photo_base64 TEXT` and `photo_mime_type VARCHAR(50)` to `field_reports`                                        |
+| `012_media_infrastructure.sql`   | Creates `media_files` table (generic file tracking) and `settings` key-value table with seed values for video config |
+| `013_message_media.sql`          | Adds `audio_url TEXT` and `video_url TEXT` columns to `messages`                                                     |
+| `014_user_media_permissions.sql` | Adds `can_send_voice` and `can_send_video` boolean columns to `users`; grants both to existing admins                |
+| `015_entity_media.sql`           | Adds `audio_url`/`video_url` columns to `field_reports` and `rfis` (for future use)                                  |
+| `016_message_body_optional.sql`  | Drops `messages_body_check` and replaces it to allow empty `body` when `audio_url` or `video_url` is present         |
+| `017_fk_cascade_set_null.sql`    |
+| `018_missing_indexes.sql`        |
+| `019_field_report_photo_url.sql` |

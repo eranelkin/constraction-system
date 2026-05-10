@@ -1,5 +1,4 @@
-import { getRefreshToken, updateTokens, clearSession } from './auth/session';
-import type { AuthTokens } from '@constractor/types';
+import { updateAccessToken, clearSession } from './auth/session';
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 
@@ -23,14 +22,10 @@ export class ApiRequestError extends Error {
 }
 
 async function attemptRefresh(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
-
   try {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
+    const response = await fetch('/api/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -38,8 +33,8 @@ async function attemptRefresh(): Promise<string | null> {
       return null;
     }
 
-    const data = (await response.json()) as { tokens: AuthTokens };
-    updateTokens(data.tokens);
+    const data = (await response.json()) as { tokens: { accessToken: string } };
+    updateAccessToken(data.tokens.accessToken);
     return data.tokens.accessToken;
   } catch {
     clearSession();

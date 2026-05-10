@@ -62,6 +62,7 @@ export default function ReportsPage() {
   const [filterType, setFilterType] = useState<FieldReportType | 'all'>('all');
   const [selectedReport, setSelectedReport] = useState<FieldReportWithReporter | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const locationOptions = LOCATIONS[project] ?? [];
 
@@ -94,7 +95,7 @@ export default function ReportsPage() {
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to submit report');
+      setActionError(err instanceof Error ? err.message : 'Failed to submit report');
     } finally {
       setSubmitting(false);
     }
@@ -111,7 +112,7 @@ export default function ReportsPage() {
       setReports((prev) => prev.map((r) => r.id === id ? data.report : r));
       setSelectedReport((prev) => prev?.id === id ? data.report : prev);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update report');
+      setActionError(err instanceof Error ? err.message : 'Failed to update report');
     } finally {
       setActionLoading(false);
     }
@@ -126,6 +127,12 @@ export default function ReportsPage() {
 
   return (
     <div>
+      {actionError && (
+        <div className="error-banner" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1rem', padding: '0 0.25rem' }}>✕</button>
+        </div>
+      )}
       {/* Page header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 900, color: 'var(--navy)' }}>Field Reports</h1>
@@ -276,7 +283,7 @@ export default function ReportsPage() {
                       <td style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{r.project.split(' –')[0]}</td>
                       <td style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', color: '#555', whiteSpace: 'nowrap' }}>{r.location}</td>
                       <td title={r.description} style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', color: '#555', maxWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.photoBase64 && <span title="Has photo" style={{ marginRight: '0.35rem' }}>📷</span>}
+                        {r.photoUrl && <span title="Has photo" style={{ marginRight: '0.35rem' }}>📷</span>}
                         {r.description}
                       </td>
                       <td style={{ padding: '0.7rem 1rem', fontSize: '0.82rem', color: '#666', whiteSpace: 'nowrap' }}>{r.reporterName}</td>
@@ -335,11 +342,11 @@ export default function ReportsPage() {
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.875rem', color: 'var(--navy)', lineHeight: 1.5 }}>{r.description}</p>
                 </div>
 
-                {r.photoBase64 && (
+                {r.photoUrl && (
                   <div style={{ marginBottom: '1.25rem' }}>
                     <span className="field-label">Photo</span>
                     <img
-                      src={`data:${r.photoMimeType ?? 'image/jpeg'};base64,${r.photoBase64}`}
+                      src={r.photoUrl}
                       alt="Field report photo"
                       style={{ display: 'block', width: '100%', marginTop: '0.4rem', borderRadius: 'var(--radius-sm)', border: 'var(--border)', objectFit: 'cover', maxHeight: '260px' }}
                     />

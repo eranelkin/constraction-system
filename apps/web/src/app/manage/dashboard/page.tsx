@@ -142,6 +142,7 @@ export default function DashboardPage() {
   const [rfis, setRfis]         = useState<RfiWithUsers[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [loading, setLoading]   = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   const load = useCallback(async () => {
@@ -156,8 +157,8 @@ export default function DashboardPage() {
       setTasks(tData.tasks);
       setReports(fData.reports);
       setUserCount(uData.users.filter((u) => u.isActive).length);
-    } catch {
-      // silently fail — dashboard shows zeroes rather than an error page
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -203,6 +204,13 @@ export default function DashboardPage() {
 
   return (
     <div>
+
+      {pageError && (
+        <div className="error-banner" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {pageError}</span>
+          <button onClick={() => setPageError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1rem', padding: '0 0.25rem' }}>✕</button>
+        </div>
+      )}
 
       {/* ── Alert strip ──────────────────────────────────────────────────── */}
       {alertVisible && (

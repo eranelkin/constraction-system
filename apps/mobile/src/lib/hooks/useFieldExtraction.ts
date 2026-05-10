@@ -28,7 +28,8 @@ export function useFieldExtraction() {
         body: { text, fields },
         token: token ?? undefined,
       });
-    } catch {
+    } catch (err) {
+      console.error('[ai] field extraction failed', err);
       return {};
     } finally {
       setIsExtracting(false);

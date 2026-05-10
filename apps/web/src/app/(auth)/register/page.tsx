@@ -3,9 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiRequest } from '@/lib/api-client';
 import { saveSession } from '@/lib/auth/session';
-import type { AuthResponseDTO } from '@constractor/types';
+import type { AuthUser } from '@constractor/types';
 
 type Role = 'client' | 'contractor';
 
@@ -14,29 +13,44 @@ const ROLES: { value: Role; emoji: string; label: string; desc: string }[] = [
   { value: 'contractor', emoji: '👷', label: 'Worker',     desc: 'Take jobs on site' },
 ];
 
+function isValidEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [role, setRole] = useState<Role>('contractor');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const displayName = (form.get('displayName') as string).trim();
+    const email = (form.get('email') as string).trim();
+    const password = form.get('password') as string;
+
+    const errors: Record<string, string> = {};
+    if (displayName.length < 2) errors['displayName'] = 'Name must be at least 2 characters.';
+    if (!isValidEmail(email)) errors['email'] = 'Enter a valid email address.';
+    if (password.length < 8) errors['password'] = 'Password must be at least 8 characters.';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setError(null);
     setLoading(true);
-
-    const form = new FormData(e.currentTarget);
     try {
-      const result = await apiRequest<AuthResponseDTO>('/auth/register', {
+      const res = await fetch('/api/auth/register', {
         method: 'POST',
-        body: {
-          email: form.get('email'),
-          password: form.get('password'),
-          displayName: form.get('displayName'),
-          role,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: form.get('email'), password: form.get('password'), displayName: form.get('displayName'), role }),
       });
-      saveSession(result.user, result.tokens);
+      const result = await res.json() as { user: AuthUser; tokens: { accessToken: string } } | { error: string };
+      if (!res.ok) throw new Error((result as { error: string }).error);
+      const { user, tokens } = result as { user: AuthUser; tokens: { accessToken: string } };
+      saveSession(user, tokens.accessToken);
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -103,7 +117,10 @@ export default function RegisterPage() {
                 placeholder="John Smith"
                 className="comic-input"
                 autoComplete="name"
+                style={fieldErrors['displayName'] ? { borderColor: '#e53e3e' } : undefined}
+                onChange={() => fieldErrors['displayName'] && setFieldErrors((p) => { const n = { ...p }; delete n['displayName']; return n; })}
               />
+              {fieldErrors['displayName'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['displayName']}</div>}
             </div>
 
             <div>
@@ -116,7 +133,10 @@ export default function RegisterPage() {
                 placeholder="you@example.com"
                 className="comic-input"
                 autoComplete="email"
+                style={fieldErrors['email'] ? { borderColor: '#e53e3e' } : undefined}
+                onChange={() => fieldErrors['email'] && setFieldErrors((p) => { const n = { ...p }; delete n['email']; return n; })}
               />
+              {fieldErrors['email'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['email']}</div>}
             </div>
 
             <div>
@@ -130,7 +150,10 @@ export default function RegisterPage() {
                 placeholder="Min. 8 characters"
                 className="comic-input"
                 autoComplete="new-password"
+                style={fieldErrors['password'] ? { borderColor: '#e53e3e' } : undefined}
+                onChange={() => fieldErrors['password'] && setFieldErrors((p) => { const n = { ...p }; delete n['password']; return n; })}
               />
+              {fieldErrors['password'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['password']}</div>}
             </div>
 
             {error && (

@@ -3,34 +3,48 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiRequest } from '@/lib/api-client';
 import { saveSession } from '@/lib/auth/session';
-import type { AuthResponseDTO } from '@constractor/types';
+import type { AuthUser } from '@constractor/types';
+
+function isValidEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const email = (form.get('email') as string).trim();
+    const password = form.get('password') as string;
+
+    const errors: Record<string, string> = {};
+    if (!isValidEmail(email)) errors['email'] = 'Enter a valid email address.';
+    if (!password) errors['password'] = 'Password is required.';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setError(null);
     setLoading(true);
-
-    const form = new FormData(e.currentTarget);
     try {
-      const result = await apiRequest<AuthResponseDTO>('/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
-        body: {
-          email: form.get('email'),
-          password: form.get('password'),
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),
       });
-      if (result.user.role === 'member') {
+      const result = await res.json() as { user: AuthUser; tokens: { accessToken: string } } | { error: string };
+      if (!res.ok) throw new Error((result as { error: string }).error);
+      const { user, tokens } = result as { user: AuthUser; tokens: { accessToken: string } };
+      if (user.role === 'member') {
         setError('This portal is for managers only. Please use the mobile app.');
         return;
       }
-      saveSession(result.user, result.tokens);
+      saveSession(user, tokens.accessToken);
       router.push('/manage/users');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -78,7 +92,10 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 className="comic-input"
                 autoComplete="email"
+                style={fieldErrors['email'] ? { borderColor: '#e53e3e' } : undefined}
+                onChange={() => fieldErrors['email'] && setFieldErrors((p) => { const n = { ...p }; delete n['email']; return n; })}
               />
+              {fieldErrors['email'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['email']}</div>}
             </div>
 
             <div>
@@ -91,7 +108,10 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 className="comic-input"
                 autoComplete="current-password"
+                style={fieldErrors['password'] ? { borderColor: '#e53e3e' } : undefined}
+                onChange={() => fieldErrors['password'] && setFieldErrors((p) => { const n = { ...p }; delete n['password']; return n; })}
               />
+              {fieldErrors['password'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['password']}</div>}
             </div>
 
             {error && (

@@ -31,6 +31,13 @@ export async function getStoredUser(): Promise<AuthUser | null> {
   }
 }
 
+export async function updateTokens(tokens: AuthTokens): Promise<void> {
+  await Promise.all([
+    SecureStore.setItemAsync(ACCESS_KEY, tokens.accessToken),
+    SecureStore.setItemAsync(REFRESH_KEY, tokens.refreshToken),
+  ]);
+}
+
 export async function updateStoredUser(updates: Partial<AuthUser>): Promise<void> {
   const current = await getStoredUser();
   if (!current) return;

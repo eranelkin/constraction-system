@@ -169,8 +169,8 @@ export default function ThreadScreen() {
         oldestIdRef.current = data.messages[0]?.id;
       }
       setHasMore(data.messages.length === 50);
-    } catch {
-      // silently fail — user can retry by scrolling
+    } catch (err) {
+      console.error('[chat] loadOlder failed', err);
     } finally {
       setLoadingMore(false);
     }
@@ -195,7 +195,7 @@ export default function ThreadScreen() {
         const s = await apiRequest<PlatformSettings>('/settings', { token });
         setVideoMaxDuration(s.videoMaxDurationSeconds);
         setVideoQuality(s.videoQuality);
-      } catch { /* use defaults */ }
+      } catch (err) { console.error('[chat] settings fetch failed, using defaults', err); }
     })();
   }, [fetchToken]);
 
@@ -224,7 +224,7 @@ export default function ThreadScreen() {
       try {
         const token = await fetchToken();
         await apiRequest(`/messaging/conversations/${id}/read`, { method: 'POST', token });
-      } catch { /* ignore */ }
+      } catch (err) { console.error('[chat] mark-as-read failed', err); }
     })();
   }, [id, fetchToken]);
 
@@ -316,7 +316,8 @@ export default function ThreadScreen() {
                 token,
               });
               msg = { ...incoming, translatedBody: data.translatedText };
-            } catch {
+            } catch (err) {
+              console.error('[chat] socket message translation failed', err);
               translatingSet.current.delete(incoming.id);
             }
             setMessages((prev) => {
@@ -352,14 +353,19 @@ export default function ThreadScreen() {
                 token,
               });
               return { ...m, translatedBody: res.translatedText };
-            } catch {
+            } catch (err) {
+              console.error('[chat] initial load translation failed', err);
               translatingSet.current.delete(m.id);
               return m;
             }
           }),
         );
 
-        setMessages(loadedMessages);
+        setMessages((prev) => {
+          const restIds = new Set(loadedMessages.map((m) => m.id));
+          const socketOnly = prev.filter((m) => !restIds.has(m.id));
+          return [...loadedMessages, ...socketOnly];
+        });
         lastIdRef.current = loadedMessages.at(-1)?.id;
         oldestIdRef.current = loadedMessages[0]?.id;
         setHasMore(data.messages.length === 50);
@@ -605,7 +611,8 @@ export default function ThreadScreen() {
           playbackRef.current = null;
         }
       });
-    } catch {
+    } catch (err) {
+      console.error('[chat] audio playback failed', err);
       setPlayingId(null);
     }
   }
@@ -615,7 +622,9 @@ export default function ThreadScreen() {
     try {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       await soundRef.current?.replayAsync();
-    } catch {}
+    } catch (err) {
+      console.error('[chat] notification sound failed', err);
+    }
   }
 
   function formatDuration(secs: number) {
@@ -649,7 +658,8 @@ export default function ThreadScreen() {
             setMessages((prev) =>
               prev.map((msg) => msg.id === m.id ? { ...msg, translatedBody: data.translatedText } : msg),
             );
-          } catch {
+          } catch (err) {
+            console.error('[chat] translate effect failed', err);
             translatingSet.current.delete(m.id);
           }
         }),
@@ -696,7 +706,7 @@ export default function ThreadScreen() {
     const isTranslating = false;
 
     const senderInitial = (msg.senderName ?? '?').charAt(0).toUpperCase();
-    const senderColor = SENDER_COLORS[msg.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
+    const senderColor = SENDER_COLORS[(msg.senderId ?? '0').charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
 
     const avatarNode = isGroupChat ? (
       <View style={[styles.bubbleAvatar, { backgroundColor: senderColor }]}>

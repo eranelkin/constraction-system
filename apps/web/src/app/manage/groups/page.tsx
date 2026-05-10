@@ -31,6 +31,7 @@ export default function GroupsPage() {
   const [editTarget, setEditTarget] = useState<PublicGroup | null>(null);
   const [form, setForm] = useState<GroupFormData>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formLoading, setFormLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PublicGroup | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -79,6 +80,7 @@ export default function GroupsPage() {
     setFormMode(null);
     setEditTarget(null);
     setFormError(null);
+    setFieldErrors({});
   }
 
   function toggleMember(userId: string) {
@@ -92,6 +94,12 @@ export default function GroupsPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!form.name.trim()) errors['name'] = 'Group name is required.';
+    else if (form.name.trim().length > 100) errors['name'] = 'Group name must be 100 characters or fewer.';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setFormError(null);
     setFormLoading(true);
     try {
@@ -175,8 +183,10 @@ export default function GroupsPage() {
               <div>
                 <label className="field-label">Group Name *</label>
                 <input className="comic-input" value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  required minLength={1} maxLength={100} placeholder="e.g. Electricians" />
+                  onChange={(e) => { setForm((f) => ({ ...f, name: e.target.value })); setFieldErrors((p) => { const n = { ...p }; delete n['name']; return n; }); }}
+                  required minLength={1} maxLength={100} placeholder="e.g. Electricians"
+                  style={fieldErrors['name'] ? { borderColor: '#e53e3e' } : undefined} />
+                {fieldErrors['name'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['name']}</div>}
               </div>
 
               {/* Description */}

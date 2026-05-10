@@ -21,14 +21,22 @@ async function main() {
 
   io.on('connection', (socket) => {
     const user = socket.data['user'] as AuthUser;
-    void socket.join(`user:${user.id}`);
+
+    Promise.resolve(socket.join(`user:${user.id}`)).catch((err: unknown) => {
+      console.error(`[socket] Failed to join user room for ${user.id}:`, err);
+      socket.disconnect(true);
+    });
 
     socket.on('join_conversation', (conversationId: string) => {
-      void container.realtimeProvider.joinRoom(`conversation:${conversationId}`, user.id);
+      container.realtimeProvider
+        .joinRoom(`conversation:${conversationId}`, user.id)
+        .catch((err) => console.error(`[socket] Failed to join conversation ${conversationId}:`, err));
     });
 
     socket.on('leave_conversation', (conversationId: string) => {
-      void container.realtimeProvider.leaveRoom(`conversation:${conversationId}`, user.id);
+      container.realtimeProvider
+        .leaveRoom(`conversation:${conversationId}`, user.id)
+        .catch((err) => console.error(`[socket] Failed to leave conversation ${conversationId}:`, err));
     });
   });
 

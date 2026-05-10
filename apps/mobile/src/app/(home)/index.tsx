@@ -176,7 +176,7 @@ export default function HomeScreen() {
         const fresh = await apiRequest<{ user: AuthUser }>('/auth/me', { token: token ?? undefined });
         setMe(fresh.user);
         meRef.current = fresh.user;
-      } catch { /* use cached user */ }
+      } catch (err) { console.error('[home] user refresh failed, using cache', err); }
     })();
   }, []);
 

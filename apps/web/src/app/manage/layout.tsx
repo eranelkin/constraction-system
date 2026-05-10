@@ -67,8 +67,10 @@ export default function ManageLayout({ children }: { children: React.ReactNode }
   }, [menuOpen]);
 
   function handleLogout() {
-    clearSession();
-    router.push('/login');
+    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+      clearSession();
+      router.push('/login');
+    });
   }
 
   if (!user) return null;
