@@ -1,4 +1,4 @@
-import { mkdir, writeFile, access, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, access, unlink, stat } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -48,9 +48,15 @@ export class LocalStorageProvider implements IStorageProvider {
     }
   }
 
-  async createReadStream(key: string): Promise<NodeJS.ReadableStream> {
+  async createReadStream(key: string, options?: { start?: number; end?: number }): Promise<NodeJS.ReadableStream> {
     const filePath = join(this.uploadDir, key);
     await access(filePath);
-    return createReadStream(filePath);
+    return createReadStream(filePath, options);
+  }
+
+  async getFileSize(key: string): Promise<number> {
+    const filePath = join(this.uploadDir, key);
+    const { size } = await stat(filePath);
+    return size;
   }
 }

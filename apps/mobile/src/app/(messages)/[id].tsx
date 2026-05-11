@@ -138,6 +138,7 @@ export default function ThreadScreen() {
   const [videoMaxDuration, setVideoMaxDuration] = useState(12);
   const [videoQuality, setVideoQuality] = useState(0.4);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
+  const [pendingVideoUri, setPendingVideoUri] = useState<string | null>(null);
 
   // Audio playback for received voice messages
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -403,11 +404,15 @@ export default function ThreadScreen() {
     setInput('');
     try {
       const token = await fetchToken();
-      await apiRequest<unknown>(
+      const { message } = await apiRequest<{ message: Message }>(
         `/messaging/conversations/${id}/messages`,
         { method: 'POST', body: { body }, token },
       );
-      // Message will arrive via the new_message socket event
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
+      });
     } catch (err) {
       Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorSend'));
     }
@@ -560,10 +565,15 @@ export default function ThreadScreen() {
       if (!uri) throw new Error('No audio URI');
       const token = (await fetchToken()) ?? '';
       const { url } = await uploadFile(uri, 'audio/m4a', token);
-      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+      const { message } = await apiRequest<{ message: Message }>(`/messaging/conversations/${id}/messages`, {
         method: 'POST',
         body: { body: '', audioUrl: url },
         token,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
       });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not send voice message');
@@ -587,8 +597,15 @@ export default function ThreadScreen() {
 
   // ── Video message ─────────────────────────────────────────────────────────
 
-  async function handleVideoRecorded(uri: string) {
+  function handleVideoRecorded(uri: string) {
     setShowVideoRecorder(false);
+    setPendingVideoUri(uri);
+  }
+
+  async function sendPendingVideo() {
+    if (!pendingVideoUri || !id) return;
+    const uri = pendingVideoUri;
+    setPendingVideoUri(null);
     setVmPhase('uploading');
     try {
       const token = (await fetchToken()) ?? '';
@@ -596,10 +613,15 @@ export default function ThreadScreen() {
       // MIME type so the server stores and serves the right Content-Type.
       const mimeType = uri.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
       const { url } = await uploadFile(uri, mimeType, token);
-      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+      const { message } = await apiRequest<{ message: Message }>(`/messaging/conversations/${id}/messages`, {
         method: 'POST',
         body: { body: '', videoUrl: url },
         token,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
       });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not send video message');
@@ -1011,11 +1033,45 @@ export default function ThreadScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
+      {/* ── Video Preview Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={pendingVideoUri !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingVideoUri(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editingContainer}>
+            <Pressable
+              style={({ pressed }) => [styles.circleBtn, styles.cancelBtn, pressed && styles.btnPressed]}
+              onPress={() => setPendingVideoUri(null)}
+            >
+              <Text style={styles.circleBtnText}>✕</Text>
+            </Pressable>
+            <View style={styles.videoPreviewCard}>
+              <Video
+                source={{ uri: pendingVideoUri! }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                style={styles.videoPreview}
+                shouldPlay={false}
+              />
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.circleBtn, styles.voiceSendBtn, pressed && styles.btnPressed]}
+              onPress={() => void sendPendingVideo()}
+            >
+              <Text style={styles.circleBtnText}>➤</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <VideoRecorderModal
         visible={showVideoRecorder}
         maxDuration={videoMaxDuration}
         onClose={() => setShowVideoRecorder(false)}
-        onRecorded={(uri) => void handleVideoRecorded(uri)}
+        onRecorded={(uri) => handleVideoRecorded(uri)}
       />
     </View>
   );
@@ -1135,6 +1191,7 @@ const styles = StyleSheet.create({
   // Input bar
   inputRow: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'flex-end',
     padding: ms(10), gap: ms(8),
     borderTopWidth: 2.5, borderTopColor: '#1C1C2E',
@@ -1285,5 +1342,22 @@ const styles = StyleSheet.create({
     height: s(160),
     borderRadius: ms(8),
     overflow: 'hidden',
+  },
+
+  // Video preview modal
+  videoPreviewCard: {
+    borderRadius: ms(16),
+    borderWidth: 2.5,
+    borderColor: '#1C1C2E',
+    overflow: 'hidden',
+    shadowColor: '#1C1C2E',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+  videoPreview: {
+    width: s(260),
+    height: s(200),
   },
 });

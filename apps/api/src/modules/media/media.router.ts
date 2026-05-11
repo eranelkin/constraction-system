@@ -77,10 +77,28 @@ export function createMediaRouter(container: AppContainer): Router {
         return;
       }
 
-      const stream = await storageProvider.createReadStream(row.storage_key);
+      const fileSize = await storageProvider.getFileSize(row.storage_key);
+      const rangeHeader = req.headers['range'];
+
       res.setHeader('Content-Type', row.mime_type);
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      (stream as import('node:stream').Readable).pipe(res);
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      if (rangeHeader) {
+        const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-') as [string, string | undefined];
+        const start = parseInt(startStr, 10);
+        const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+        res.setHeader('Content-Length', chunkSize);
+        const stream = await storageProvider.createReadStream(row.storage_key, { start, end });
+        (stream as import('node:stream').Readable).pipe(res);
+      } else {
+        res.setHeader('Content-Length', fileSize);
+        const stream = await storageProvider.createReadStream(row.storage_key);
+        (stream as import('node:stream').Readable).pipe(res);
+      }
     } catch (err) {
       next(err);
     }

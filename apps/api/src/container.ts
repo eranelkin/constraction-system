@@ -77,7 +77,7 @@ export async function buildContainer(io?: Server): Promise<AppContainer> {
     ? (() => { throw new Error('BullMQProvider not yet implemented'); })()
     : new InMemoryQueueProvider();
 
-  const realtimeProvider: IRealtimeProvider = config.USE_REAL_REALTIME && io
+  const realtimeProvider: IRealtimeProvider = io
     ? new SocketIOProvider(io)
     : new InMemoryRealtimeProvider();
 
