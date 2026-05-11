@@ -10,6 +10,7 @@ export interface FieldReport {
   status: FieldReportStatus;
   reportedBy: string;
   photoUrl: string | null;
+  videoUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +26,7 @@ export type CreateFieldReportDTO = {
   description: string;
   reportedBy: string;
   photoUrl?: string;
+  videoUrl?: string;
 };
 
 export type UpdateFieldReportDTO = {

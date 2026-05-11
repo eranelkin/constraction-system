@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
@@ -17,11 +18,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Audio } from 'expo-av';
+import { Audio, Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
-import { apiRequest } from '@/lib/api-client';
+import { apiRequest, uploadFile } from '@/lib/api-client';
+import { VideoRecorderModal } from './(messages)/VideoRecorderModal';
 import { ms, s, vs } from '@/lib/responsive';
 import { useFieldExtraction, type FieldDefinition } from '@/lib/hooks/useFieldExtraction';
 import type { FieldReportType } from '@constractor/types';
@@ -41,6 +43,8 @@ export default function ReportNewScreen() {
   ], [t]);
 
   const [photo, setPhoto] = useState<{ base64: string; uri: string } | null>(null);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [description, setDescription] = useState('');
   const [type, setType] = useState<FieldReportType>('progress');
   const [project, setProject] = useState(PROJECTS[0] ?? '');
@@ -174,6 +178,11 @@ export default function ReportNewScreen() {
         body['photoBase64'] = photo.base64;
         body['photoMimeType'] = 'image/jpeg';
       }
+      if (videoUri) {
+        const mimeType = videoUri.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
+        const { url } = await uploadFile(videoUri, mimeType, token ?? '');
+        body['videoUrl'] = url;
+      }
 
       await apiRequest('/field-reports', {
         method: 'POST',
@@ -251,17 +260,53 @@ export default function ReportNewScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Photo */}
-          <Pressable style={styles.photoBox} onPress={() => void handleTakePhoto()}>
-            {photo ? (
-              <Image source={{ uri: photo.uri }} style={styles.photoPreview} resizeMode="cover" />
-            ) : (
-              <View style={styles.photoPlaceholder}>
-                <Text style={styles.photoIcon}>📷</Text>
-                <Text style={styles.photoHint}>{t('report.photoHint')}</Text>
+          {/* Photo + Video — mutually exclusive */}
+          <View style={styles.mediaRow}>
+            {/* Camera */}
+            {!videoUri && (
+              <View style={styles.mediaWrapper}>
+                <View style={styles.mediaBox}>
+                  {photo ? (
+                    <Image source={{ uri: photo.uri }} style={styles.mediaPreview} resizeMode="cover" />
+                  ) : (
+                    <Pressable style={styles.mediaPlaceholderBtn} onPress={() => void handleTakePhoto()}>
+                      <Text style={styles.mediaIcon}>📷</Text>
+                    </Pressable>
+                  )}
+                </View>
+                {photo && (
+                  <Pressable style={styles.mediaDeleteBtn} onPress={() => setPhoto(null)}>
+                    <Text style={styles.mediaDeleteText}>✕</Text>
+                  </Pressable>
+                )}
               </View>
             )}
-          </Pressable>
+            {/* Video */}
+            {!photo && (
+              <View style={styles.mediaWrapper}>
+                <View style={styles.mediaBox}>
+                  {videoUri ? (
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={styles.mediaPreview}
+                      resizeMode={ResizeMode.COVER}
+                      shouldPlay={false}
+                      useNativeControls
+                    />
+                  ) : (
+                    <Pressable style={styles.mediaPlaceholderBtn} onPress={() => setShowVideoRecorder(true)}>
+                      <Text style={styles.mediaIcon}>🎬</Text>
+                    </Pressable>
+                  )}
+                </View>
+                {videoUri && (
+                  <Pressable style={styles.mediaDeleteBtn} onPress={() => setVideoUri(null)}>
+                    <Text style={styles.mediaDeleteText}>✕</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
 
           {/* Type */}
           <View style={styles.section}>
@@ -333,6 +378,13 @@ export default function ReportNewScreen() {
           <View style={{ height: vs(20) }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <VideoRecorderModal
+        visible={showVideoRecorder}
+        maxDuration={30}
+        onClose={() => setShowVideoRecorder(false)}
+        onRecorded={(uri) => { setVideoUri(uri); setShowVideoRecorder(false); }}
+      />
     </View>
   );
 }
@@ -386,37 +438,57 @@ const styles = StyleSheet.create({
     padding: ms(16),
     gap: ms(4),
   },
-  photoBox: {
+  mediaRow: {
+    flexDirection: 'row',
+    gap: ms(10),
+    marginBottom: ms(12),
+  },
+  mediaWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
+  mediaBox: {
     borderWidth: 2.5,
     borderColor: '#1C1C2E',
     borderRadius: ms(16),
     overflow: 'hidden',
-    height: vs(180),
+    height: vs(150),
     backgroundColor: '#FFFFFF',
-    marginBottom: ms(12),
     shadowColor: '#1C1C2E',
     shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 5,
   },
-  photoPlaceholder: {
+  mediaPlaceholderBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: ms(8),
   },
-  photoIcon: {
-    fontSize: ms(40),
+  mediaIcon: {
+    fontSize: ms(36),
   },
-  photoHint: {
-    fontSize: ms(14),
-    fontWeight: '700',
-    color: '#888',
-  },
-  photoPreview: {
+  mediaPreview: {
     width: '100%',
     height: '100%',
+  },
+  mediaDeleteBtn: {
+    position: 'absolute',
+    top: ms(6),
+    right: ms(6),
+    width: ms(28),
+    height: ms(28),
+    borderRadius: ms(14),
+    backgroundColor: 'rgba(229,57,53,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  mediaDeleteText: {
+    color: '#FFFFFF',
+    fontSize: ms(13),
+    fontWeight: '900',
+    lineHeight: ms(16),
   },
   section: {
     marginBottom: ms(16),

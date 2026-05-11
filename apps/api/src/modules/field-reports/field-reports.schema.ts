@@ -7,6 +7,7 @@ export const createFieldReportSchema = z.object({
   description:   z.string().min(1).max(2000),
   photoBase64:   z.string().optional(),
   photoMimeType: z.string().max(50).optional(),
+  videoUrl:      z.string().optional(),
 });
 
 export const updateFieldReportSchema = z.object({

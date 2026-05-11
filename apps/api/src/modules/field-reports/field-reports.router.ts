@@ -7,7 +7,7 @@ import { createFieldReportSchema, updateFieldReportSchema, listQuerySchema } fro
 
 export function createFieldReportsRouter(container: AppContainer): Router {
   const router = Router();
-  const { fieldReportRepository, storageProvider } = container;
+  const { fieldReportRepository, storageProvider, db } = container;
   const authenticate = createAuthMiddleware(container.authProvider);
 
   router.use(authenticate);
@@ -38,13 +38,17 @@ export function createFieldReportsRouter(container: AppContainer): Router {
     try {
       const data = createFieldReportSchema.parse(req.body);
 
+      let photoKey: string | undefined;
       let photoUrl: string | undefined;
+      let photoMime: string | undefined;
+      let photoSize = 0;
       if (data.photoBase64 !== undefined) {
-        const mimeType = data.photoMimeType ?? 'image/jpeg';
-        const ext = mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg';
-        const key = `field-reports/${randomUUID()}${ext}`;
+        photoMime = data.photoMimeType ?? 'image/jpeg';
+        const ext = photoMime === 'image/png' ? '.png' : photoMime === 'image/webp' ? '.webp' : '.jpg';
+        photoKey = `field-reports/${randomUUID()}${ext}`;
         const buffer = Buffer.from(data.photoBase64, 'base64');
-        const result = await storageProvider.upload(key, buffer, { contentType: mimeType });
+        photoSize = buffer.length;
+        const result = await storageProvider.upload(photoKey, buffer, { contentType: photoMime });
         photoUrl = result.url;
       }
 
@@ -56,7 +60,26 @@ export function createFieldReportsRouter(container: AppContainer): Router {
         reportedBy: req.user!.id,
       };
       if (photoUrl !== undefined) createData.photoUrl = photoUrl;
+      if (data.videoUrl !== undefined) createData.videoUrl = data.videoUrl;
       const report = await fieldReportRepository.create(createData);
+
+      // Register photo in media_files so the serve route can find and auth-check it
+      if (photoKey && photoUrl && photoMime) {
+        await db.query(
+          `INSERT INTO media_files (storage_key, url, mime_type, size_bytes, uploaded_by, entity_type, entity_id)
+           VALUES ($1, $2, $3, $4, $5, 'field_report', $6)
+           ON CONFLICT (storage_key) DO NOTHING`,
+          [photoKey, photoUrl, photoMime, photoSize, req.user!.id, report.id],
+        );
+      }
+      // Tag pre-uploaded video so any authenticated user can view it
+      if (data.videoUrl) {
+        await db.query(
+          `UPDATE media_files SET entity_type = 'field_report', entity_id = $1 WHERE url = $2`,
+          [report.id, data.videoUrl],
+        );
+      }
+
       res.status(201).json({ report });
     } catch (err) { next(err); }
   });

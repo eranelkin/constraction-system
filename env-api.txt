@@ -28,7 +28,7 @@
   REDIS_URL=redis://localhost:6379                                                                                                                                                                                   
   
   # ── Realtime (Socket.IO) - set to true if you want socket events to work across multiple connected clients simultaneously; false is fine for single-device testing                                                                                                                                                      
-  USE_REAL_REALTIME=false                    
+  USE_REAL_REALTIME=true                    
                                                                                                                                                                                                                      
   # ── Speech (Groq Whisper) -Records your voice, sends the audio to Groq's Whisper model, returns the actual transcribed text in the original language.
   USE_REAL_SPEECH=true                   

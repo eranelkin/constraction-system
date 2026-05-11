@@ -7,6 +7,9 @@ import type { FieldReportWithReporter, FieldReportType, FieldReportStatus, ListF
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
+const resolveMediaUrl = (url: string) => url.startsWith('/') ? `${API_URL}${url}` : url;
+
 const PROJECTS = ['Tower A – Tel Aviv', 'Tower B – Tel Aviv', 'Riverside Complex', 'North Bridge', 'Mall Renovation'];
 const LOCATIONS: Record<string, string[]> = {
   'Tower A – Tel Aviv':   ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Roof', 'Basement'],
@@ -284,6 +287,7 @@ export default function ReportsPage() {
                       <td style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', color: '#555', whiteSpace: 'nowrap' }}>{r.location}</td>
                       <td title={r.description} style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', color: '#555', maxWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {r.photoUrl && <span title="Has photo" style={{ marginRight: '0.35rem' }}>📷</span>}
+                        {r.videoUrl && <span title="Has video" style={{ marginRight: '0.35rem' }}>🎬</span>}
                         {r.description}
                       </td>
                       <td style={{ padding: '0.7rem 1rem', fontSize: '0.82rem', color: '#666', whiteSpace: 'nowrap' }}>{r.reporterName}</td>
@@ -346,9 +350,19 @@ export default function ReportsPage() {
                   <div style={{ marginBottom: '1.25rem' }}>
                     <span className="field-label">Photo</span>
                     <img
-                      src={r.photoUrl}
+                      src={`${resolveMediaUrl(r.photoUrl)}?token=${encodeURIComponent(token())}`}
                       alt="Field report photo"
                       style={{ display: 'block', width: '100%', marginTop: '0.4rem', borderRadius: 'var(--radius-sm)', border: 'var(--border)', objectFit: 'cover', maxHeight: '260px' }}
+                    />
+                  </div>
+                )}
+                {r.videoUrl && (
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <span className="field-label">Video</span>
+                    <video
+                      src={`${resolveMediaUrl(r.videoUrl)}?token=${encodeURIComponent(token())}`}
+                      controls
+                      style={{ display: 'block', width: '100%', marginTop: '0.4rem', borderRadius: 'var(--radius-sm)', border: 'var(--border)', maxHeight: '260px', background: '#000' }}
                     />
                   </div>
                 )}
