@@ -24,6 +24,12 @@ export default function MediaFilesPage() {
   const router = useRouter();
   const token = () => getAccessToken() ?? '';
 
+  const mediaUrl = (url: string) => {
+    const base = url.startsWith('/') ? `${API_URL}${url}` : url;
+    const tok = token();
+    return tok ? `${base}?token=${encodeURIComponent(tok)}` : base;
+  };
+
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [tab, setTab] = useState<Tab>('videos');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -111,17 +117,16 @@ export default function MediaFilesPage() {
     for (const id of selected) {
       const file = files.find((f) => f.id === id);
       if (!file) continue;
-      const fullUrl = file.url.startsWith('/') ? `${API_URL}${file.url}` : file.url;
       try {
-        const res = await fetch(fullUrl);
+        const res = await fetch(mediaUrl(file.url));
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = fileName(file.storageKey);
         a.click();
         URL.revokeObjectURL(a.href);
-      } catch {
-        // skip files that fail to download
+      } catch (err) {
+        console.error('[media] download failed for file:', err);
       }
     }
     setDownloading(false);
@@ -262,7 +267,7 @@ export default function MediaFilesPage() {
                     <td style={{ padding: '0.5rem 1rem' }}>
                       {file.mimeType.startsWith('video/') ? (
                         <video
-                          src={file.url.startsWith('/') ? `${API_URL}${file.url}` : file.url}
+                          src={mediaUrl(file.url)}
                           controls
                           preload="metadata"
                           style={{ width: 160, height: 100, objectFit: 'cover', borderRadius: 6, display: 'block', border: '2px solid rgba(0,0,0,0.1)' }}
@@ -273,7 +278,7 @@ export default function MediaFilesPage() {
                             {fileName(file.storageKey)}
                           </span>
                           <audio
-                            src={file.url.startsWith('/') ? `${API_URL}${file.url}` : file.url}
+                            src={mediaUrl(file.url)}
                             controls
                             preload="none"
                             style={{ width: 220, height: 32 }}

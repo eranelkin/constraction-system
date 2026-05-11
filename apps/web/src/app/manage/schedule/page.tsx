@@ -38,6 +38,7 @@ export default function SchedulePage() {
   const [showLogDelay, setShowLogDelay] = useState(false);
   const [notified, setNotified] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [dlTask, setDlTask] = useState('');
   const [dlProject, setDlProject] = useState('Tower A – Tel Aviv');
@@ -70,7 +71,7 @@ export default function SchedulePage() {
       setTasks((prev) => prev.map((t) => t.id === id ? data.task : t));
       setSelected((prev) => prev?.id === id ? data.task : prev);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update task');
+      setActionError(err instanceof Error ? err.message : 'Failed to update task');
     } finally {
       setActionLoading(false);
     }
@@ -96,7 +97,7 @@ export default function SchedulePage() {
       setShowLogDelay(false);
       setSelected(data.task);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to log delay');
+      setActionError(err instanceof Error ? err.message : 'Failed to log delay');
     } finally {
       setDlSubmitting(false);
     }
@@ -118,6 +119,12 @@ export default function SchedulePage() {
 
   return (
     <div>
+      {actionError && (
+        <div className="error-banner" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1rem', padding: '0 0.25rem' }}>✕</button>
+        </div>
+      )}
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>

@@ -1,0 +1,43 @@
+# ── Server ────────────────────────────────────────────                                                                                                                                                           
+  NODE_ENV=development                                                                                                                                                                                               
+  PORT=4501                                                                                                                                                                                                          
+                                                                                                                                                                                                                     
+  # ── Database ──────────────────────────────────────────                                                                                                                                                           
+  DATABASE_URL=postgresql://constractor:constractor@localhost:5432/constractor_dev
+  # DATABASE_URL_TEST=postgresql://constractor:constractor@localhost:5432/constractor_test  # optional                                                                                                               
+                                                                                                                                                                                                                     
+  # ── Auth ──────────────────────────────────────────────
+  ACCESS_TOKEN_SECRET=dev-access-secret-change-in-prod                                                                                                                                                               
+  ACCESS_TOKEN_EXPIRES_IN=900                                                                                                                                                                                        
+  REFRESH_TOKEN_EXPIRES_IN=2592000       
+                                                                                                                                                                                                                     
+  # ── CORS ──────────────────────────────────────────────
+  CORS_ORIGINS=http://localhost:4500,http://localhost:4502
+                                                                                                                                                                                                                     
+  # ── File storage ──────────────────────────────────────
+  USE_REAL_STORAGE=false                                                                                                                                                                                             
+  UPLOAD_DIR=./uploads                       
+  # Set these only when USE_REAL_STORAGE=true (S3):
+  # AWS_REGION=                                                                                                                                                                                                      
+  # AWS_ACCESS_KEY_ID=                                                                                                                                                                                               
+  # AWS_SECRET_ACCESS_KEY=                                                                                                                                                                                           
+  # S3_BUCKET=                                                                                                                                                                                                       
+                                             
+  # ── Queue ─────────────────────────────────────────────
+  USE_REAL_QUEUE=false
+  REDIS_URL=redis://localhost:6379                                                                                                                                                                                   
+  
+  # ── Realtime (Socket.IO) - set to true if you want socket events to work across multiple connected clients simultaneously; false is fine for single-device testing                                                                                                                                                      
+  USE_REAL_REALTIME=false                    
+                                                                                                                                                                                                                     
+  # ── Speech (Groq Whisper) -Records your voice, sends the audio to Groq's Whisper model, returns the actual transcribed text in the original language.
+  USE_REAL_SPEECH=true                   
+  GROQ_API_KEY=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                                                                                                                                                                              
+  
+  # ── Translation -  controls whether translation is real or mocked                                                                                                                                                     
+  USE_REAL_TRANSLATION=true                 
+  # OPENAI_API_KEY=  # needed when USE_REAL_TRANSLATION=true
+                                                                                                                                                                                                                     
+  # ── Field extraction (AI) - It controls whether AI is used to automatically extract structured data from field reports.  
+  USE_REAL_FIELD_EXTRACTION=true                                                                                                                                                                                    
+  # OPENAI_API_KEY=  # needed when USE_REAL_FIELD_EXTRACTION=true        

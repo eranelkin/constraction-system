@@ -15,8 +15,8 @@ export interface ConversationParticipant {
 export interface Message {
   id: string;
   conversationId: string;
-  senderId: string;
-  senderName: string;
+  senderId: string | null;
+  senderName: string | null;
   body: string;
   audioUrl: string | null;
   videoUrl: string | null;

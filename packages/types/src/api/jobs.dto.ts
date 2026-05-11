@@ -3,8 +3,8 @@ import type { JobStatus, ApplicationStatus } from '../domain/Job.js';
 export interface JobApplicationDetail {
   id: string;
   jobId: string;
-  contractorId: string;
-  contractorName: string;
+  contractorId: string | null;
+  contractorName: string | null;
   coverNote: string;
   status: ApplicationStatus;
   createdAt: Date;
@@ -12,7 +12,7 @@ export interface JobApplicationDetail {
 
 export interface JobSummary {
   id: string;
-  clientId: string;
+  clientId: string | null;
   title: string;
   budget: number;
   location: string;
@@ -23,7 +23,7 @@ export interface JobSummary {
 
 export interface JobDetail {
   id: string;
-  clientId: string;
+  clientId: string | null;
   title: string;
   description: string;
   budget: number;

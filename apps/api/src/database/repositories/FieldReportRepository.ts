@@ -11,8 +11,7 @@ interface FieldReportRow {
   status: FieldReportStatus;
   reported_by: string;
   reporter_name: string;
-  photo_base64: string | null;
-  photo_mime_type: string | null;
+  photo_url: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -27,8 +26,7 @@ function rowToReport(row: FieldReportRow): FieldReportWithReporter {
     status: row.status,
     reportedBy: row.reported_by,
     reporterName: row.reporter_name,
-    photoBase64: row.photo_base64,
-    photoMimeType: row.photo_mime_type,
+    photoUrl: row.photo_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -69,11 +67,10 @@ export class FieldReportRepository implements IFieldReportRepository {
 
   async create(data: CreateFieldReportDTO): Promise<FieldReportWithReporter> {
     const row = await this.db.queryOne<FieldReportRow>(
-      `INSERT INTO field_reports (type, project, location, description, reported_by, photo_base64, photo_mime_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO field_reports (type, project, location, description, reported_by, photo_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [data.type, data.project, data.location, data.description, data.reportedBy,
-       data.photoBase64 ?? null, data.photoMimeType ?? null],
+      [data.type, data.project, data.location, data.description, data.reportedBy, data.photoUrl ?? null],
     );
     if (!row) throw new Error('Field report creation failed');
     const created = await this.findById(row.id);

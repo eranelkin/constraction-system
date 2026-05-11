@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '@/lib/api-client';
 import { getAccessToken, getStoredUser, clearSession } from '@/lib/auth/session';
+import { connectSocket, disconnectSocket } from '@/lib/socket';
+import type { Socket } from 'socket.io-client';
 import type {
   ListConversationsResponse,
   ListContactsResponse,
@@ -30,8 +32,7 @@ export default function DashboardPage() {
   const [messageInput, setMessageInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const lastMessageIdRef = useRef<string | undefined>(undefined);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     setUser(getStoredUser());
@@ -47,8 +48,8 @@ export default function DashboardPage() {
         token: token(),
       });
       setConversations(data.conversations);
-    } catch {
-      // ignore background refresh errors
+    } catch (err) {
+      console.error('[chat] loadConversations failed', err);
     }
   }, []);
 
@@ -56,8 +57,8 @@ export default function DashboardPage() {
     try {
       const data = await apiRequest<ListContactsResponse>('/auth/users', { token: token() });
       setContacts(data.users);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[chat] loadContacts failed', err);
     }
   }, []);
 
@@ -72,43 +73,56 @@ export default function DashboardPage() {
         `/messaging/conversations/${convId}/messages`,
         { token: token() },
       );
-      setMessages(data.messages);
-      lastMessageIdRef.current = data.messages.at(-1)?.id;
+      setMessages((prev) => {
+        const restIds = new Set(data.messages.map((m) => m.id));
+        const socketOnly = prev.filter((m) => !restIds.has(m.id));
+        return [...data.messages, ...socketOnly];
+      });
     } catch {
       setError('Failed to load messages');
     }
   }, []);
 
+  // Connect socket once the user is loaded; reload conversations on real-time updates
+  useEffect(() => {
+    const accessToken = getAccessToken();
+    if (!user || !accessToken) return;
+
+    const socket = connectSocket(accessToken);
+    socketRef.current = socket;
+
+    socket.on('conversation_updated', () => { void loadConversations(); });
+
+    return () => {
+      disconnectSocket();
+      socketRef.current = null;
+    };
+  }, [user, loadConversations]);
+
+  // Load history + join/leave room + stream new messages for the selected conversation
   useEffect(() => {
     if (!selectedId) return;
 
-    lastMessageIdRef.current = undefined;
     setMessages([]);
-    loadMessages(selectedId);
+    void loadMessages(selectedId);
 
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    const socket = socketRef.current;
+    if (socket) socket.emit('join_conversation', selectedId);
 
-    pollIntervalRef.current = setInterval(async () => {
-      if (!selectedId) return;
-      const after = lastMessageIdRef.current;
-      const url = after
-        ? `/messaging/conversations/${selectedId}/messages?after=${after}`
-        : `/messaging/conversations/${selectedId}/messages`;
-      try {
-        const data = await apiRequest<ListMessagesResponse>(url, { token: token() });
-        if (data.messages.length > 0) {
-          setMessages((prev) => [...prev, ...data.messages]);
-          lastMessageIdRef.current = data.messages.at(-1)?.id;
-        }
-      } catch {
-        // ignore poll errors
-      }
-    }, 3000);
+    function handleNewMessage({ message }: { message: Message }) {
+      setMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
+      void loadConversations();
+    }
+
+    socket?.on('new_message', handleNewMessage);
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (socket) {
+        socket.emit('leave_conversation', selectedId);
+        socket.off('new_message', handleNewMessage);
+      }
     };
-  }, [selectedId, loadMessages]);
+  }, [selectedId, loadMessages, loadConversations]);
 
   async function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -120,8 +134,8 @@ export default function DashboardPage() {
         `/messaging/conversations/${selectedId}/messages`,
         { method: 'POST', body: { body }, token: token() },
       );
-      setMessages((prev) => [...prev, data.message]);
-      lastMessageIdRef.current = data.message.id;
+      // Add optimistically; socket will also deliver this message — dedup by id guards both orderings
+      setMessages((prev) => prev.some((m) => m.id === data.message.id) ? prev : [...prev, data.message]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send');
     }
@@ -143,8 +157,10 @@ export default function DashboardPage() {
   }
 
   function handleLogout() {
-    clearSession();
-    router.push('/login');
+    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+      clearSession();
+      router.push('/login');
+    });
   }
 
   const otherParticipants = (conv: ConversationSummary) =>

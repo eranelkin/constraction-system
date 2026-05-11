@@ -8,12 +8,16 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "type-check": "tsc --noEmit",
+    "db:backup": "docker exec constructor-site-management-postgres pg_dump -U constractor constractor_dev > ./backups/constractor_dev_$(date +%Y%m%d_%H%M%S).sql && echo 'Backup saved to ./backups/'",
+    "db:restore": "node -e \"const f=process.argv[1]; if(!f){console.error('Usage: pnpm db:restore <file>');process.exit(1)}\" --",
     "db:migrate": "node --env-file=.env --import tsx/esm src/database/migrate.ts",
     "db:seed": "node --env-file=.env --import tsx/esm src/database/seeds/dev-users.ts",
     "db:seed-test": "node --env-file=.env --import tsx/esm src/database/seeds/seed-test-users.ts",
-    "test": "node --env-file=.env ./node_modules/vitest/vitest.mjs run",
-    "test:watch": "node --env-file=.env ./node_modules/vitest/vitest.mjs",
-    "test:coverage": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --coverage"
+    "db:create-test": "docker exec constructor-site-management-postgres createdb -U constractor constractor_test || true",
+    "db:migrate-test": "node --env-file=.env.test --import tsx/esm src/database/migrate.ts",
+    "test": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs",
+    "test:coverage": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run --coverage"
   },
   "dependencies": {
     "@constractor/config": "workspace:*",
@@ -21,6 +25,7 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.5.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "pg": "^8.13.0",

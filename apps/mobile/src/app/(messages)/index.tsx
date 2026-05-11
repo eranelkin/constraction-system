@@ -20,6 +20,7 @@ export default function ConversationListScreen() {
   const [newParticipantId, setNewParticipantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -28,8 +29,9 @@ export default function ConversationListScreen() {
         token: token ?? undefined,
       });
       setConversations(data.conversations);
-    } catch {
-      // silently ignore
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load conversations');
     }
   }, []);
 
@@ -123,13 +125,16 @@ export default function ConversationListScreen() {
           <Text style={styles.startBtnText}>{loading ? '…' : 'Start'}</Text>
         </TouchableOpacity>
       </View>
+      {error && (
+        <Text style={styles.errorText}>{error}</Text>
+      )}
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         refreshing={refreshing}
         onRefresh={() => void handleRefresh()}
-        ListEmptyComponent={<Text style={styles.empty}>No conversations yet</Text>}
+        ListEmptyComponent={!error ? <Text style={styles.empty}>No conversations yet</Text> : null}
       />
     </View>
   );
@@ -146,4 +151,5 @@ const styles = StyleSheet.create({
   convName: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
   convPreview: { fontSize: 13, color: '#64748b', marginTop: 4 },
   empty: { padding: 24, textAlign: 'center', color: '#94a3b8' },
+  errorText: { padding: 16, textAlign: 'center', color: '#dc2626', fontSize: 14 },
 });

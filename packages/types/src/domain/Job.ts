@@ -3,7 +3,7 @@ export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
 
 export interface Job {
   id: string;
-  clientId: string;
+  clientId: string | null;
   title: string;
   description: string;
   budget: number;
@@ -17,7 +17,7 @@ export interface Job {
 export interface JobApplication {
   id: string;
   jobId: string;
-  contractorId: string;
+  contractorId: string | null;
   coverNote: string;
   status: ApplicationStatus;
   createdAt: Date;

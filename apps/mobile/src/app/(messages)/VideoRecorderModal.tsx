@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
@@ -61,7 +62,9 @@ export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }
       const video = await cameraRef.current.recordAsync({ maxDuration });
       if (video?.uri) onRecorded(video.uri);
       else onClose();
-    } catch {
+    } catch (err) {
+      console.error('[video] recording failed', err);
+      Alert.alert(t('common.error'), t('chat.couldNotRecord'));
       onClose();
     } finally {
       stopTimer();
@@ -151,6 +154,8 @@ export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }
     </Modal>
   );
 }
+
+export default VideoRecorderModal;
 
 function formatSecs(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, '0');

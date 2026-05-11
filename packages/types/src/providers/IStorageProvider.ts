@@ -26,4 +26,8 @@ export interface IStorageProvider {
   delete(key: string): Promise<void>;
 
   exists(key: string): Promise<boolean>;
+
+  createReadStream(key: string, options?: { start?: number; end?: number }): Promise<NodeJS.ReadableStream>;
+
+  getFileSize(key: string): Promise<number>;
 }

@@ -81,6 +81,7 @@ export default function UsersPage() {
   const [form, setForm] = useState<UserFormData>(EMPTY_FORM);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formLoading, setFormLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PublicUser | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -133,6 +134,7 @@ export default function UsersPage() {
     setEditTarget(null);
     setAvatarPreview(null);
     setFormError(null);
+    setFieldErrors({});
   }
 
   function handleAvatarChange(e: ChangeEvent<HTMLInputElement>) {
@@ -161,6 +163,14 @@ export default function UsersPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (form.displayName.trim().length < 2) errors['displayName'] = 'Name must be at least 2 characters.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors['email'] = 'Enter a valid email address.';
+    if (formMode === 'add' && form.password.length < 8) errors['password'] = 'Password must be at least 8 characters.';
+    if (formMode === 'edit' && form.password && form.password.length < 8) errors['password'] = 'Password must be at least 8 characters.';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setFormError(null);
     setFormLoading(true);
     try {
@@ -274,16 +284,20 @@ export default function UsersPage() {
               <div>
                 <label className="field-label">Display Name</label>
                 <input className="comic-input" value={form.displayName}
-                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                  required minLength={2} maxLength={100} placeholder="Jane Smith" />
+                  onChange={(e) => { setForm((f) => ({ ...f, displayName: e.target.value })); setFieldErrors((p) => { const n = { ...p }; delete n['displayName']; return n; }); }}
+                  required minLength={2} maxLength={100} placeholder="Jane Smith"
+                  style={fieldErrors['displayName'] ? { borderColor: '#e53e3e' } : undefined} />
+                {fieldErrors['displayName'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['displayName']}</div>}
               </div>
 
               {/* Email */}
               <div>
                 <label className="field-label">Email</label>
                 <input className="comic-input" type="email" value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  required placeholder="jane@company.com" />
+                  onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((p) => { const n = { ...p }; delete n['email']; return n; }); }}
+                  required placeholder="jane@company.com"
+                  style={fieldErrors['email'] ? { borderColor: '#e53e3e' } : undefined} />
+                {fieldErrors['email'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['email']}</div>}
               </div>
 
               {/* Password */}
@@ -292,8 +306,10 @@ export default function UsersPage() {
                   Password {formMode === 'edit' && <span style={{ fontWeight: 400, textTransform: 'none' }}>(leave blank to keep)</span>}
                 </label>
                 <input className="comic-input" type="password" value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  required={formMode === 'add'} minLength={8} placeholder="Min 8 characters" autoComplete="new-password" />
+                  onChange={(e) => { setForm((f) => ({ ...f, password: e.target.value })); setFieldErrors((p) => { const n = { ...p }; delete n['password']; return n; }); }}
+                  required={formMode === 'add'} minLength={8} placeholder="Min 8 characters" autoComplete="new-password"
+                  style={fieldErrors['password'] ? { borderColor: '#e53e3e' } : undefined} />
+                {fieldErrors['password'] && <div style={{ color: '#e53e3e', fontSize: '0.78rem', marginTop: '0.25rem' }}>{fieldErrors['password']}</div>}
               </div>
 
               {/* Role */}

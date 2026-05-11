@@ -202,7 +202,7 @@ export default function JobDetailScreen() {
                   {job.status === 'open' && app.status === 'pending' && (
                     <TouchableOpacity
                       style={styles.hireBtn}
-                      onPress={() => void handleHire(app.id, app.contractorName)}
+                      onPress={() => void handleHire(app.id, app.contractorName ?? '')}
                     >
                       <Text style={styles.hireBtnText}>{t('jobs.detail.hireConfirm')}</Text>
                     </TouchableOpacity>

@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-const DEV_SECRETS = [
-  'dev-access-secret-change-in-prod',
-  'dev-refresh-secret-change-in-prod',
-];
+const DEV_SECRETS = ['dev-access-secret-change-in-prod'];
 
 const booleanFromString = z
   .enum(['true', 'false', '1', '0'])
@@ -15,11 +12,10 @@ const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(4501),
     DATABASE_URL: z.string().url(),
+    DATABASE_URL_TEST: z.string().url().optional(),
     ACCESS_TOKEN_SECRET: z.string().min(16),
-    REFRESH_TOKEN_SECRET: z.string().min(16),
     ACCESS_TOKEN_EXPIRES_IN: z.coerce.number().int().positive().default(900),
     REFRESH_TOKEN_EXPIRES_IN: z.coerce.number().int().positive().default(2592000),
-    USE_REAL_AI: booleanFromString,
     USE_REAL_STORAGE: booleanFromString,
     USE_REAL_QUEUE: booleanFromString,
     USE_REAL_REALTIME: booleanFromString,
@@ -42,10 +38,7 @@ const envSchema = z
   .refine(
     (data) => {
       if (data.NODE_ENV === 'production') {
-        return (
-          !DEV_SECRETS.includes(data.ACCESS_TOKEN_SECRET) &&
-          !DEV_SECRETS.includes(data.REFRESH_TOKEN_SECRET)
-        );
+        return !DEV_SECRETS.includes(data.ACCESS_TOKEN_SECRET);
       }
       return true;
     },

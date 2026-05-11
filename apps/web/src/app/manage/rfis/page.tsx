@@ -73,6 +73,7 @@ export default function RFIsPage() {
   const [filter, setFilter]         = useState<StatusFilter>('all');
   const [response, setResponse]     = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Create form state
   const [fTitle, setFTitle]       = useState('');
@@ -120,7 +121,7 @@ export default function RFIsPage() {
       setSelected(data.rfi);
       setFilter('all');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create RFI');
+      setActionError(err instanceof Error ? err.message : 'Failed to create RFI');
     } finally {
       setCreating(false);
     }
@@ -133,7 +134,7 @@ export default function RFIsPage() {
       setRfis((prev) => prev.map((r) => r.id === id ? data.rfi : r));
       setSelected((prev) => prev?.id === id ? data.rfi : prev);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update RFI');
+      setActionError(err instanceof Error ? err.message : 'Failed to update RFI');
     } finally {
       setActionLoading(false);
     }
@@ -163,6 +164,12 @@ export default function RFIsPage() {
 
   return (
     <div>
+      {actionError && (
+        <div className="error-banner" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1rem', padding: '0 0.25rem' }}>✕</button>
+        </div>
+      )}
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>

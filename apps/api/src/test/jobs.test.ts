@@ -1,17 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import { getApp } from './setup.js';
+import { getApp, getContainer } from './setup.js';
 
 type UserBody = { user: { id: string }; tokens: { accessToken: string } };
 
 async function registerClient(email: string, displayName = 'Client'): Promise<UserBody> {
-  const res = await request(getApp()).post('/auth/register').send({
+  const regRes = await request(getApp()).post('/auth/register').send({
     email,
     password: 'password123',
     displayName,
-    role: 'client',
   });
-  return res.body as UserBody;
+  const userId = (regRes.body as UserBody).user.id;
+  await getContainer().db.query("UPDATE users SET role = 'manager' WHERE id = $1", [userId]);
+  const loginRes = await request(getApp()).post('/auth/login').send({ email, password: 'password123' });
+  return loginRes.body as UserBody;
 }
 
 async function registerContractor(email: string, displayName = 'Contractor'): Promise<UserBody> {
@@ -19,7 +21,6 @@ async function registerContractor(email: string, displayName = 'Contractor'): Pr
     email,
     password: 'password123',
     displayName,
-    role: 'contractor',
   });
   return res.body as UserBody;
 }

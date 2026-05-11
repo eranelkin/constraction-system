@@ -1,5 +1,4 @@
-import { getRefreshToken, updateTokens, clearSession } from './auth/session';
-import type { AuthTokens } from '@constractor/types';
+import { updateAccessToken, clearSession } from './auth/session';
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 
@@ -22,29 +21,35 @@ export class ApiRequestError extends Error {
   }
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
 async function attemptRefresh(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
+  if (refreshPromise) return refreshPromise;
 
-  try {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
+        clearSession();
+        return null;
+      }
+
+      const data = (await response.json()) as { tokens: { accessToken: string } };
+      updateAccessToken(data.tokens.accessToken);
+      return data.tokens.accessToken;
+    } catch {
       clearSession();
       return null;
+    } finally {
+      refreshPromise = null;
     }
+  })();
 
-    const data = (await response.json()) as { tokens: AuthTokens };
-    updateTokens(data.tokens);
-    return data.tokens.accessToken;
-  } catch {
-    clearSession();
-    return null;
-  }
+  return refreshPromise;
 }
 
 async function executeRequest<T>(path: string, options: RequestOptions): Promise<T> {

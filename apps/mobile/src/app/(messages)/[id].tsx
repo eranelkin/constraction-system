@@ -138,6 +138,7 @@ export default function ThreadScreen() {
   const [videoMaxDuration, setVideoMaxDuration] = useState(12);
   const [videoQuality, setVideoQuality] = useState(0.4);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
+  const [pendingVideoUri, setPendingVideoUri] = useState<string | null>(null);
 
   // Audio playback for received voice messages
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -151,8 +152,13 @@ export default function ThreadScreen() {
   const userLanguageRef = useRef<string>('en');
   const soundRef = useRef<Audio.Sound | null>(null);
 
+  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
+  const tokenRef = useRef<string | undefined>(undefined);
   const fetchToken = useCallback(async () => {
-    return (await getAccessToken()) ?? undefined;
+    const token = (await getAccessToken()) ?? undefined;
+    tokenRef.current = token;
+    setAuthToken(token);
+    return token;
   }, []);
 
   const loadOlder = useCallback(async () => {
@@ -169,8 +175,8 @@ export default function ThreadScreen() {
         oldestIdRef.current = data.messages[0]?.id;
       }
       setHasMore(data.messages.length === 50);
-    } catch {
-      // silently fail — user can retry by scrolling
+    } catch (err) {
+      console.error('[chat] loadOlder failed', err);
     } finally {
       setLoadingMore(false);
     }
@@ -195,7 +201,7 @@ export default function ThreadScreen() {
         const s = await apiRequest<PlatformSettings>('/settings', { token });
         setVideoMaxDuration(s.videoMaxDurationSeconds);
         setVideoQuality(s.videoQuality);
-      } catch { /* use defaults */ }
+      } catch (err) { console.error('[chat] settings fetch failed, using defaults', err); }
     })();
   }, [fetchToken]);
 
@@ -224,7 +230,7 @@ export default function ThreadScreen() {
       try {
         const token = await fetchToken();
         await apiRequest(`/messaging/conversations/${id}/read`, { method: 'POST', token });
-      } catch { /* ignore */ }
+      } catch (err) { console.error('[chat] mark-as-read failed', err); }
     })();
   }, [id, fetchToken]);
 
@@ -271,6 +277,11 @@ export default function ThreadScreen() {
   useEffect(() => {
     if (!id) return;
 
+    // Defined here so the cleanup below can remove the same function reference.
+    // Re-joins the conversation room after a socket reconnect — room memberships
+    // are server-side state that is lost whenever the socket disconnects.
+    const onConnect = () => { getSocket()?.emit('join_conversation', id); };
+
     const load = async () => {
       try {
         const token = await fetchToken();
@@ -280,6 +291,8 @@ export default function ThreadScreen() {
         // and is deduplicated by the existing-ID check below.
         const sock = connectSocket(token ?? '');
         sock.emit('join_conversation', id);
+        sock.on('connect', onConnect);
+
         sock.on('new_message', (payload: { message: Message }) => {
           const incoming = payload.message;
 
@@ -290,7 +303,7 @@ export default function ThreadScreen() {
 
           const isOwn = incoming.senderId === userIdRef.current;
           if (!isOwn) void playMessageSound();
-          if (isOwn || incoming.translatedBody) {
+          if (isOwn || incoming.translatedBody || !incoming.body) {
             // Own message or already translated (server cache hit) → show immediately
             setMessages((prev) => {
               if (prev.some((m) => m.id === incoming.id)) return prev;
@@ -316,7 +329,8 @@ export default function ThreadScreen() {
                 token,
               });
               msg = { ...incoming, translatedBody: data.translatedText };
-            } catch {
+            } catch (err) {
+              console.error('[chat] socket message translation failed', err);
               translatingSet.current.delete(incoming.id);
             }
             setMessages((prev) => {
@@ -343,7 +357,7 @@ export default function ThreadScreen() {
         const myLang = userLanguageRef.current;
         const loadedMessages = await Promise.all(
           data.messages.map(async (m) => {
-            if (m.senderId === myId || m.translatedBody || !myLang) return m;
+            if (m.senderId === myId || m.translatedBody || !myLang || !m.body) return m;
             translatingSet.current.add(m.id);
             try {
               const res = await apiRequest<{ translatedText: string }>('/translate', {
@@ -352,14 +366,19 @@ export default function ThreadScreen() {
                 token,
               });
               return { ...m, translatedBody: res.translatedText };
-            } catch {
+            } catch (err) {
+              console.error('[chat] initial load translation failed', err);
               translatingSet.current.delete(m.id);
               return m;
             }
           }),
         );
 
-        setMessages(loadedMessages);
+        setMessages((prev) => {
+          const restIds = new Set(loadedMessages.map((m) => m.id));
+          const socketOnly = prev.filter((m) => !restIds.has(m.id));
+          return [...loadedMessages, ...socketOnly];
+        });
         lastIdRef.current = loadedMessages.at(-1)?.id;
         oldestIdRef.current = loadedMessages[0]?.id;
         setHasMore(data.messages.length === 50);
@@ -373,6 +392,7 @@ export default function ThreadScreen() {
     void load();
 
     return () => {
+      getSocket()?.off('connect', onConnect);
       getSocket()?.off('new_message');
       getSocket()?.emit('leave_conversation', id);
     };
@@ -384,11 +404,15 @@ export default function ThreadScreen() {
     setInput('');
     try {
       const token = await fetchToken();
-      await apiRequest<unknown>(
+      const { message } = await apiRequest<{ message: Message }>(
         `/messaging/conversations/${id}/messages`,
         { method: 'POST', body: { body }, token },
       );
-      // Message will arrive via the new_message socket event
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
+      });
     } catch (err) {
       Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorSend'));
     }
@@ -488,11 +512,19 @@ export default function ThreadScreen() {
     setVoiceText('');
     try {
       const token = await fetchToken();
-      await apiRequest<unknown>(
+      const { message } = await apiRequest<{ message: Message }>(
         `/messaging/conversations/${id}/messages`,
         { method: 'POST', body: { body }, token },
       );
-      // Message will arrive via the new_message socket event
+      // Add directly from the HTTP response so the bubble always appears even if the
+      // socket event is missed (e.g. socket reconnected during recording and lost the
+      // conversation room). The socket handler deduplicates by message ID.
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
+      });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     } catch (err) {
       Alert.alert(t('common.error'), err instanceof Error ? err.message : t('chat.errorSend'));
     }
@@ -533,10 +565,15 @@ export default function ThreadScreen() {
       if (!uri) throw new Error('No audio URI');
       const token = (await fetchToken()) ?? '';
       const { url } = await uploadFile(uri, 'audio/m4a', token);
-      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+      const { message } = await apiRequest<{ message: Message }>(`/messaging/conversations/${id}/messages`, {
         method: 'POST',
         body: { body: '', audioUrl: url },
         token,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
       });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not send voice message');
@@ -560,16 +597,31 @@ export default function ThreadScreen() {
 
   // ── Video message ─────────────────────────────────────────────────────────
 
-  async function handleVideoRecorded(uri: string) {
+  function handleVideoRecorded(uri: string) {
     setShowVideoRecorder(false);
+    setPendingVideoUri(uri);
+  }
+
+  async function sendPendingVideo() {
+    if (!pendingVideoUri || !id) return;
+    const uri = pendingVideoUri;
+    setPendingVideoUri(null);
     setVmPhase('uploading');
     try {
       const token = (await fetchToken()) ?? '';
-      const { url } = await uploadFile(uri, 'video/mp4', token);
-      await apiRequest<unknown>(`/messaging/conversations/${id}/messages`, {
+      // iOS records .mov (QuickTime); Android records .mp4. Use the correct
+      // MIME type so the server stores and serves the right Content-Type.
+      const mimeType = uri.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
+      const { url } = await uploadFile(uri, mimeType, token);
+      const { message } = await apiRequest<{ message: Message }>(`/messaging/conversations/${id}/messages`, {
         method: 'POST',
         body: { body: '', videoUrl: url },
         token,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        lastIdRef.current = message.id;
+        return [...prev, message];
       });
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not send video message');
@@ -596,7 +648,12 @@ export default function ThreadScreen() {
     setPlayingId(msgId);
     try {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true });
+      const token = await fetchToken();
+      const authedUri = token ? `${audioUrl}?token=${encodeURIComponent(token)}` : audioUrl;
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: authedUri },
+        { shouldPlay: true },
+      );
       playbackRef.current = sound;
       sound.setOnPlaybackStatusUpdate((status) => {
         if (!status.isLoaded || status.didJustFinish) {
@@ -605,7 +662,8 @@ export default function ThreadScreen() {
           playbackRef.current = null;
         }
       });
-    } catch {
+    } catch (err) {
+      console.error('[chat] audio playback failed', err);
       setPlayingId(null);
     }
   }
@@ -615,7 +673,9 @@ export default function ThreadScreen() {
     try {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       await soundRef.current?.replayAsync();
-    } catch {}
+    } catch (err) {
+      console.error('[chat] notification sound failed', err);
+    }
   }
 
   function formatDuration(secs: number) {
@@ -630,7 +690,7 @@ export default function ThreadScreen() {
     if (!userId || !userLanguage) return;
 
     const needsTranslation = messages.filter(
-      (m) => m.senderId !== userId && !m.translatedBody && !translatingSet.current.has(m.id),
+      (m) => m.senderId !== userId && !m.translatedBody && !translatingSet.current.has(m.id) && !!m.body,
     );
     if (needsTranslation.length === 0) return;
 
@@ -649,7 +709,8 @@ export default function ThreadScreen() {
             setMessages((prev) =>
               prev.map((msg) => msg.id === m.id ? { ...msg, translatedBody: data.translatedText } : msg),
             );
-          } catch {
+          } catch (err) {
+            console.error('[chat] translate effect failed', err);
             translatingSet.current.delete(m.id);
           }
         }),
@@ -696,7 +757,7 @@ export default function ThreadScreen() {
     const isTranslating = false;
 
     const senderInitial = (msg.senderName ?? '?').charAt(0).toUpperCase();
-    const senderColor = SENDER_COLORS[msg.senderId.charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
+    const senderColor = SENDER_COLORS[(msg.senderId ?? '0').charCodeAt(0) % SENDER_COLORS.length] ?? '#4ECDC4';
 
     const avatarNode = isGroupChat ? (
       <View style={[styles.bubbleAvatar, { backgroundColor: senderColor }]}>
@@ -731,12 +792,16 @@ export default function ThreadScreen() {
                   </Text>
                 </Pressable>
               ) : msg.videoUrl ? (
-                <Video
-                  source={{ uri: resolveMediaUrl(msg.videoUrl) }}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                  style={styles.videoBubble}
-                />
+                authToken ? (
+                  <Video
+                    source={{ uri: `${resolveMediaUrl(msg.videoUrl)}?token=${encodeURIComponent(authToken)}` }}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    style={styles.videoBubble}
+                  />
+                ) : (
+                  <ActivityIndicator size="small" color="#888" style={{ margin: 8 }} />
+                )
               ) : (
                 !isMe && isTranslating && !translated
                   ? <ActivityIndicator size={12} color="#888" style={{ alignSelf: 'flex-start' }} />
@@ -968,11 +1033,45 @@ export default function ThreadScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
+      {/* ── Video Preview Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={pendingVideoUri !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingVideoUri(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editingContainer}>
+            <Pressable
+              style={({ pressed }) => [styles.circleBtn, styles.cancelBtn, pressed && styles.btnPressed]}
+              onPress={() => setPendingVideoUri(null)}
+            >
+              <Text style={styles.circleBtnText}>✕</Text>
+            </Pressable>
+            <View style={styles.videoPreviewCard}>
+              <Video
+                source={{ uri: pendingVideoUri! }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                style={styles.videoPreview}
+                shouldPlay={false}
+              />
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.circleBtn, styles.voiceSendBtn, pressed && styles.btnPressed]}
+              onPress={() => void sendPendingVideo()}
+            >
+              <Text style={styles.circleBtnText}>➤</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <VideoRecorderModal
         visible={showVideoRecorder}
         maxDuration={videoMaxDuration}
         onClose={() => setShowVideoRecorder(false)}
-        onRecorded={(uri) => void handleVideoRecorded(uri)}
+        onRecorded={(uri) => handleVideoRecorded(uri)}
       />
     </View>
   );
@@ -1092,6 +1191,7 @@ const styles = StyleSheet.create({
   // Input bar
   inputRow: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'flex-end',
     padding: ms(10), gap: ms(8),
     borderTopWidth: 2.5, borderTopColor: '#1C1C2E',
@@ -1242,5 +1342,22 @@ const styles = StyleSheet.create({
     height: s(160),
     borderRadius: ms(8),
     overflow: 'hidden',
+  },
+
+  // Video preview modal
+  videoPreviewCard: {
+    borderRadius: ms(16),
+    borderWidth: 2.5,
+    borderColor: '#1C1C2E',
+    overflow: 'hidden',
+    shadowColor: '#1C1C2E',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+  videoPreview: {
+    width: s(260),
+    height: s(200),
   },
 });
