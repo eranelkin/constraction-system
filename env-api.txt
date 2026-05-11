@@ -32,7 +32,7 @@
                                                                                                                                                                                                                      
   # ── Speech (Groq Whisper) -Records your voice, sends the audio to Groq's Whisper model, returns the actual transcribed text in the original language.
   USE_REAL_SPEECH=true                   
-  GROQ_API_KEY=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                                                                                                                                                                              
+  GROQ_API_KEY=<KEY>                                                                                                                                                                              
   
   # ── Translation -  controls whether translation is real or mocked                                                                                                                                                     
   USE_REAL_TRANSLATION=true                 
