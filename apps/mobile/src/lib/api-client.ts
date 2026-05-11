@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import type { AuthTokens } from '@constractor/types';
-import { getRefreshToken, updateTokens, clearSession } from './auth/token-storage';
+import { getAccessToken, getRefreshToken, updateTokens, clearSession } from './auth/token-storage';
 
 export const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 
@@ -34,19 +34,23 @@ async function attemptRefresh(): Promise<string | null> {
   refreshPromise = (async () => {
     try {
       const refreshToken = await getRefreshToken();
-      if (!refreshToken) {
-        await clearSession();
+      if (!refreshToken) return null;
+
+      let response: Response;
+      try {
+        response = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+      } catch {
+        // Network error — session may still be valid, do not wipe it
         return null;
       }
 
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
       if (!response.ok) {
-        await clearSession();
+        // Only a 401 from the refresh endpoint is a confirmed dead session
+        if (response.status === 401) await clearSession();
         return null;
       }
 
@@ -54,7 +58,6 @@ async function attemptRefresh(): Promise<string | null> {
       await updateTokens(data.tokens);
       return data.tokens.accessToken;
     } catch {
-      await clearSession();
       return null;
     } finally {
       refreshPromise = null;
@@ -92,8 +95,10 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
+  // Always read the freshest token from storage so callers never pass a stale value
+  const token = options.token ?? (await getAccessToken()) ?? undefined;
   try {
-    return await executeRequest<T>(path, options);
+    return await executeRequest<T>(path, { ...options, token });
   } catch (err) {
     if (err instanceof ApiRequestError && err.status === 401) {
       const newToken = await attemptRefresh();

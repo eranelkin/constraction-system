@@ -121,6 +121,10 @@ export function createUsersRouter(container: AppContainer): Router {
       const updated = await userRepository.update(id, updateData);
       if (!updated) throw new NotFoundError('User');
 
+      if (data.role !== undefined) {
+        await authProvider.revokeAll(id);
+      }
+
       const { passwordHash: _, ...publicUser } = updated;
       const hasAvatar = updateData.avatarData !== undefined
         ? updateData.avatarData !== null

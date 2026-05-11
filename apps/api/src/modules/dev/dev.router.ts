@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { AppContainer } from '../../container.js';
 
-// This router is only mounted in non-production environments.
+// This router is only mounted in non-production environments — no auth required.
 export function createDevRouter(container: AppContainer): Router {
   const router = Router();
 

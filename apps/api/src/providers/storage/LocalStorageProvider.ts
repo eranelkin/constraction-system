@@ -1,5 +1,5 @@
 import { mkdir, writeFile, access, unlink } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { IStorageProvider, UploadOptions, UploadResult, GetUrlOptions } from '@constractor/types';
@@ -24,13 +24,13 @@ export class LocalStorageProvider implements IStorageProvider {
     const sizeBytes = Buffer.isBuffer(data) ? data.length : 0;
     return {
       key,
-      url: `/uploads/${key}`,
+      url: `/media/serve/${key}`,
       sizeBytes,
     };
   }
 
   async getUrl(key: string, _options?: GetUrlOptions): Promise<string> {
-    return `/uploads/${key}`;
+    return `/media/serve/${key}`;
   }
 
   async delete(key: string): Promise<void> {
@@ -46,5 +46,11 @@ export class LocalStorageProvider implements IStorageProvider {
     } catch {
       return false;
     }
+  }
+
+  async createReadStream(key: string): Promise<NodeJS.ReadableStream> {
+    const filePath = join(this.uploadDir, key);
+    await access(filePath);
+    return createReadStream(filePath);
   }
 }

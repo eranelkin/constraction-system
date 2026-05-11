@@ -182,6 +182,43 @@ export class GroupRepository implements IGroupRepository {
     return rows.map(rowToGroup);
   }
 
+  async listByUserIdFull(userId: string): Promise<PublicGroup[]> {
+    const { rows: groupRows } = await this.db.query<GroupRow & { member_count: string }>(
+      `SELECT g.*, COUNT(gm2.user_id)::text AS member_count
+       FROM groups g
+       JOIN group_members gm  ON gm.group_id  = g.id AND gm.user_id = $1
+       LEFT JOIN group_members gm2 ON gm2.group_id = g.id
+       GROUP BY g.id
+       ORDER BY g.name`,
+      [userId],
+    );
+
+    if (groupRows.length === 0) return [];
+
+    const groupIds = groupRows.map((r) => r.id);
+    const { rows: memberRows } = await this.db.query<MemberRow>(
+      `SELECT gm.group_id, gm.user_id, u.display_name, gm.joined_at
+       FROM group_members gm
+       JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id = ANY($1)
+       ORDER BY u.display_name`,
+      [groupIds],
+    );
+
+    const membersByGroup = new Map<string, GroupMember[]>();
+    for (const row of memberRows) {
+      const list = membersByGroup.get(row.group_id) ?? [];
+      list.push(rowToMember(row));
+      membersByGroup.set(row.group_id, list);
+    }
+
+    return groupRows.map((row) => ({
+      ...rowToGroup(row),
+      memberCount: parseInt(row.member_count, 10),
+      members: membersByGroup.get(row.id) ?? [],
+    }));
+  }
+
   async setConversationId(groupId: string, conversationId: string): Promise<void> {
     await this.db.query(
       'UPDATE groups SET conversation_id = $1, updated_at = NOW() WHERE id = $2',

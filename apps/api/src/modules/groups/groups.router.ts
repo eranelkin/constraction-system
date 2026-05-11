@@ -20,9 +20,8 @@ export function createGroupsRouter(container: AppContainer): Router {
   // GET /groups/mine — all auth users (must be before requireRole)
   router.get('/mine', async (req, res, next) => {
     try {
-      const all = await groupRepository.listAll();
-      const mine = all.filter((g) => g.members.some((m) => m.userId === req.user!.id));
-      res.json({ groups: mine });
+      const groups = await groupRepository.listByUserIdFull(req.user!.id);
+      res.json({ groups });
     } catch (err) { next(err); }
   });
 

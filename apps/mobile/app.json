@@ -28,7 +28,9 @@
       "expo-secure-store",
       [
         "expo-av",
-        { "microphonePermission": "Allow Constractor to record voice messages." }
+        {
+          "microphonePermission": "Allow Constractor to record voice messages."
+        }
       ],
       [
         "expo-image-picker",

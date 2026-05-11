@@ -1,6 +1,5 @@
 import express, { type Express } from 'express';
 import cors from 'cors';
-import path from 'node:path';
 import { config } from '@constractor/config';
 import type { AppContainer } from './container.js';
 import { createAuthRouter } from './modules/auth/auth.router.js';
@@ -25,9 +24,6 @@ export function createApp(container: AppContainer): Express {
 
   app.use(cors({ origin: config.CORS_ORIGINS, credentials: true }));
   app.use(express.json({ limit: '15mb' }));
-
-  // Serve uploaded media files without auth (private LAN app)
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.get('/health', (_req, res) => {
     res.json({

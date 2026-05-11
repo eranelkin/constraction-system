@@ -5,7 +5,9 @@ const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:4501';
 let socket: Socket | null = null;
 
 export function connectSocket(token: string): Socket {
-  if (socket?.connected) return socket;
+  // Reuse the existing socket even during reconnection — replacing it while it's
+  // reconnecting would orphan any handlers registered on the old instance.
+  if (socket) return socket;
   socket = io(API_URL, {
     auth: { token },
     transports: ['websocket'],

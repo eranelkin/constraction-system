@@ -7,7 +7,6 @@ async function registerUser(email: string, displayName = 'User') {
     email,
     password: 'password123',
     displayName,
-    role: 'contractor',
   });
   return res.body as {
     user: { id: string; email: string; displayName: string };

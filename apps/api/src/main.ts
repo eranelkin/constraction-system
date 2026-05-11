@@ -27,13 +27,17 @@ async function main() {
       socket.disconnect(true);
     });
 
-    socket.on('join_conversation', (conversationId: string) => {
+    socket.on('join_conversation', async (conversationId: string) => {
+      const allowed = await container.conversationRepository.isParticipant(conversationId, user.id);
+      if (!allowed) return;
       container.realtimeProvider
         .joinRoom(`conversation:${conversationId}`, user.id)
         .catch((err) => console.error(`[socket] Failed to join conversation ${conversationId}:`, err));
     });
 
-    socket.on('leave_conversation', (conversationId: string) => {
+    socket.on('leave_conversation', async (conversationId: string) => {
+      const allowed = await container.conversationRepository.isParticipant(conversationId, user.id);
+      if (!allowed) return;
       container.realtimeProvider
         .leaveRoom(`conversation:${conversationId}`, user.id)
         .catch((err) => console.error(`[socket] Failed to leave conversation ${conversationId}:`, err));
@@ -48,7 +52,6 @@ async function main() {
     console.log(`🚀 API running on http://localhost:${config.PORT}`);
     console.log(`   ENV: ${config.NODE_ENV}`);
     console.log(`   DB:  ${config.DATABASE_URL.replace(/:\/\/.*@/, '://<credentials>@')}`);
-    console.log(`   AI:  ${config.USE_REAL_AI ? 'real' : 'mock'}`);
     console.log(`   WS:  ${config.USE_REAL_REALTIME ? 'socket.io' : 'in-memory'}`);
   });
 

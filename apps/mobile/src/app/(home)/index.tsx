@@ -22,7 +22,7 @@ import {
   getStoredUser,
   clearSession,
 } from "@/lib/auth/token-storage";
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, ApiRequestError } from "@/lib/api-client";
 import { ms, s, vs } from "@/lib/responsive";
 import { connectSocket, getSocket } from "@/lib/socket";
 import type {
@@ -172,11 +172,15 @@ export default function HomeScreen() {
 
       // Refresh user object from server to get latest permissions
       try {
-        const token = await getAccessToken();
-        const fresh = await apiRequest<{ user: AuthUser }>('/auth/me', { token: token ?? undefined });
+        const fresh = await apiRequest<{ user: AuthUser }>('/auth/me');
         setMe(fresh.user);
         meRef.current = fresh.user;
-      } catch (err) { console.error('[home] user refresh failed, using cache', err); }
+      } catch (err) {
+        console.error('[home] user refresh failed, using cache', err);
+        if (err instanceof ApiRequestError && err.status === 401) {
+          router.replace('/(auth)/login' as never);
+        }
+      }
     })();
   }, []);
 
@@ -185,15 +189,10 @@ export default function HomeScreen() {
       myId ?? meRef.current?.id ?? (await getStoredUser())?.id;
     if (!silent) setLoading(true);
     try {
-      const token = await getAccessToken();
-      const t = token ?? undefined;
       const [usersData, groupsData, convsData] = await Promise.all([
-        apiRequest<{ users: ContactUser[] }>("/auth/users", { token: t }),
-        apiRequest<{ groups: PublicGroup[] }>("/groups/mine", { token: t }),
-        apiRequest<{ conversations: ConversationSummary[] }>(
-          "/messaging/conversations",
-          { token: t },
-        ),
+        apiRequest<{ users: ContactUser[] }>("/auth/users"),
+        apiRequest<{ groups: PublicGroup[] }>("/groups/mine"),
+        apiRequest<{ conversations: ConversationSummary[] }>("/messaging/conversations"),
       ]);
       if (!silent) {
         setUsers(usersData.users);
@@ -224,7 +223,11 @@ export default function HomeScreen() {
       }
       setContactUnread(newContactUnread);
       setGroupUnread(newGroupUnread);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 401) {
+        router.replace('/(auth)/login' as never);
+        return;
+      }
       if (!silent) Alert.alert(t('common.error'), t('home.errorLoad'));
     } finally {
       if (!silent) setLoading(false);
@@ -286,14 +289,9 @@ export default function HomeScreen() {
   async function openChat(user: ContactUser, index: number) {
     setStarting(user.id);
     try {
-      const token = await getAccessToken();
       const data = await apiRequest<{ conversation: { id: string } }>(
         "/messaging/conversations",
-        {
-          method: "POST",
-          body: { participantId: user.id },
-          token: token ?? undefined,
-        },
+        { method: "POST", body: { participantId: user.id } },
       );
       router.push({
         pathname: "/(messages)/[id]",

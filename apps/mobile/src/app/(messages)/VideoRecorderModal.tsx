@@ -155,6 +155,8 @@ export function VideoRecorderModal({ visible, maxDuration, onClose, onRecorded }
   );
 }
 
+export default VideoRecorderModal;
+
 function formatSecs(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, '0');
   const sec = (s % 60).toString().padStart(2, '0');

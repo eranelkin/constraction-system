@@ -21,25 +21,35 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function attemptRefresh(): Promise<string | null> {
-  try {
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      credentials: 'include',
-    });
+let refreshPromise: Promise<string | null> | null = null;
 
-    if (!response.ok) {
+async function attemptRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        clearSession();
+        return null;
+      }
+
+      const data = (await response.json()) as { tokens: { accessToken: string } };
+      updateAccessToken(data.tokens.accessToken);
+      return data.tokens.accessToken;
+    } catch {
       clearSession();
       return null;
+    } finally {
+      refreshPromise = null;
     }
+  })();
 
-    const data = (await response.json()) as { tokens: { accessToken: string } };
-    updateAccessToken(data.tokens.accessToken);
-    return data.tokens.accessToken;
-  } catch {
-    clearSession();
-    return null;
-  }
+  return refreshPromise;
 }
 
 async function executeRequest<T>(path: string, options: RequestOptions): Promise<T> {

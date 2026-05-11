@@ -12,6 +12,7 @@ interface IGroupRepository {
   removeMember(groupId: string, userId: string): Promise<void>;
   setMembers(groupId: string, userIds: string[]): Promise<void>;
   listByUserId(userId: string): Promise<Group[]>;
+  listByUserIdFull(userId: string): Promise<PublicGroup[]>;
   setConversationId(groupId: string, conversationId: string): Promise<void>;
   syncUserMemberships(userId: string, groupIds: string[]): Promise<void>;
 }

@@ -6,7 +6,7 @@ const VALID_USER = {
   email: 'alice@example.com',
   password: 'securepassword1',
   displayName: 'Alice',
-  role: 'contractor' as const,
+  role: 'member' as const,
 };
 
 // Helper: register and return tokens
@@ -69,17 +69,11 @@ describe('POST /auth/register', () => {
     expect(res.body.details.password).toBeDefined();
   });
 
-  it('rejects invalid role', async () => {
-    const res = await registerUser({ role: 'superuser' });
-    expect(res.status).toBe(422);
-    expect(res.body.details.role).toBeDefined();
-  });
-
-  it('accepts all valid roles', async () => {
-    for (const role of ['admin', 'contractor', 'client']) {
+  it('ignores any role in the request body and always creates a member', async () => {
+    for (const role of ['admin', 'manager', 'superuser']) {
       const res = await registerUser({ email: `${role}@example.com`, role });
       expect(res.status).toBe(201);
-      expect(res.body.user.role).toBe(role);
+      expect(res.body.user.role).toBe('member');
     }
   });
 });

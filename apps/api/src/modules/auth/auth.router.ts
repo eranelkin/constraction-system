@@ -4,9 +4,12 @@ import type { AppContainer } from '../../container.js';
 import { registerSchema, loginSchema, refreshSchema, logoutSchema } from './auth.schema.js';
 import { createAuthMiddleware } from './auth.middleware.js';
 
+const isTest = process.env.VITEST === 'true';
+
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skip: () => isTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many attempts, please try again later.' },
@@ -15,6 +18,7 @@ const strictLimiter = rateLimit({
 const refreshLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
+  skip: () => isTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many attempts, please try again later.' },
@@ -28,7 +32,7 @@ export function createAuthRouter(container: AppContainer): Router {
   router.post('/register', strictLimiter, async (req, res, next) => {
     try {
       const body = registerSchema.parse(req.body);
-      const result = await authProvider.signUp(body);
+      const result = await authProvider.signUp({ ...body, role: 'member' });
       res.status(201).json(result);
     } catch (err) {
       next(err);

@@ -27,6 +27,65 @@ export function createMediaRouter(container: AppContainer): Router {
   const { authProvider, storageProvider, db } = container;
   const authenticate = createAuthMiddleware(authProvider);
 
+  // GET /media/serve/* — intentionally placed BEFORE router.use(authenticate) so it can
+  // accept the token as a query-string parameter (?token=...) in addition to the
+  // Authorization header.  Browser <video>/<audio> elements and iOS AVPlayer cannot
+  // set custom headers, so they embed the JWT in the URL instead.
+  router.get('/serve/*', async (req, res, next) => {
+    try {
+      const headerToken = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+      const queryToken = typeof req.query['token'] === 'string' ? req.query['token'] : undefined;
+      const token = headerToken ?? queryToken;
+
+      if (!token) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const authResult = await authProvider.verify(token);
+      if (!authResult.valid || !authResult.user) {
+        res.status(401).json({ error: authResult.error ?? 'Invalid token' });
+        return;
+      }
+
+      const userId = authResult.user.id;
+      const storageKey = req.path.slice('/serve/'.length);
+      if (!storageKey || storageKey.includes('..')) {
+        res.status(400).json({ error: 'Invalid media path' });
+        return;
+      }
+
+      const row = await db.queryOne<{ storage_key: string; mime_type: string }>(
+        `SELECT mf.storage_key, mf.mime_type
+         FROM media_files mf
+         WHERE mf.storage_key = $1
+           AND (
+             mf.uploaded_by = $2
+             OR mf.entity_type IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM messages m
+               JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
+               WHERE (m.audio_url = mf.url OR m.video_url = mf.url)
+                 AND cp.user_id = $2
+             )
+           )`,
+        [storageKey, userId],
+      );
+
+      if (!row) {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+
+      const stream = await storageProvider.createReadStream(row.storage_key);
+      res.setHeader('Content-Type', row.mime_type);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      (stream as import('node:stream').Readable).pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.use(authenticate);
 
   // POST /media/upload — any authenticated user
