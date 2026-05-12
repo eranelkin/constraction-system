@@ -79,7 +79,7 @@ export class UserRepository implements IUserRepository {
 
   async listAll(excludeId: string): Promise<ContactUser[]> {
     const { rows } = await this.db.query<{ id: string; display_name: string; role: string }>(
-      'SELECT id, display_name, role FROM users WHERE id != $1 AND is_active = true ORDER BY display_name ASC',
+      "SELECT id, display_name, role FROM users WHERE id != $1 AND is_active = true AND role != 'admin' ORDER BY display_name ASC",
       [excludeId],
     );
     return rows.map((r) => ({

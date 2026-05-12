@@ -657,6 +657,7 @@ export default function ThreadScreen() {
       playbackRef.current = sound;
       sound.setOnPlaybackStatusUpdate((status) => {
         if (!status.isLoaded || status.didJustFinish) {
+          sound.setOnPlaybackStatusUpdate(null);
           setPlayingId(null);
           void sound.unloadAsync();
           playbackRef.current = null;

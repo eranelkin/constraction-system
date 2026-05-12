@@ -4,7 +4,10 @@ import { View, Text, StyleSheet, I18nManager, DevSettings } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useRouter } from 'expo-router';
 import i18n from 'i18next';
+import * as SecureStore from 'expo-secure-store';
 import { getAccessToken, getStoredUser } from '@/lib/auth/token-storage';
+
+const RTL_RELOAD_KEY = 'rtl_reload_pending';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -23,9 +26,14 @@ export default function RootLayout() {
             I18nManager.allowRTL(shouldBeRTL);
             I18nManager.forceRTL(shouldBeRTL);
             if (__DEV__) {
-              DevSettings.reload();
+              const pending = await SecureStore.getItemAsync(RTL_RELOAD_KEY);
+              if (!pending) {
+                await SecureStore.setItemAsync(RTL_RELOAD_KEY, '1');
+                DevSettings.reload();
+                return;
+              }
+              await SecureStore.deleteItemAsync(RTL_RELOAD_KEY);
             }
-            return;
           }
         }
 
